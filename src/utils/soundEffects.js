@@ -4,7 +4,9 @@
 class SoundManager {
   constructor() {
     this.audioContext = null
-    this.enabled = true
+    // Load sound preference from localStorage, default to true
+    const savedPreference = localStorage.getItem('soundEnabled')
+    this.enabled = savedPreference !== null ? savedPreference === 'true' : true
     this.volume = 0.3
     
     // Initialize audio context on first user interaction
@@ -111,6 +113,12 @@ class SoundManager {
 
   setEnabled(enabled) {
     this.enabled = enabled
+    // Save preference to localStorage
+    localStorage.setItem('soundEnabled', enabled.toString())
+  }
+
+  getEnabled() {
+    return this.enabled
   }
 
   setVolume(volume) {
@@ -127,6 +135,8 @@ export const useSound = () => {
     playConfirm: () => soundManager.playConfirm(),
     playError: () => soundManager.playError(),
     playHover: () => soundManager.playHover(),
+    enabled: soundManager.getEnabled(),
+    setEnabled: (enabled) => soundManager.setEnabled(enabled),
   }
 }
 

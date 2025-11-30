@@ -76,12 +76,39 @@ export const ChatHistory = () => {
 
   const loadSessionDetails = async (sessionId) => {
     try {
+      setLoading(true)
       const data = await chatbotAPI.getSession(sessionId)
-      setSelectedSession(data.session)
-      setMessages(data.messages || [])
+      if (data && data.session) {
+        setSelectedSession(data.session)
+        setMessages(data.messages || [])
+      } else {
+        // Fallback: try to get from sessions list
+        const session = sessions.find(s => s.sessionId === sessionId)
+        if (session) {
+          setSelectedSession(session)
+          // Try to load messages separately
+          try {
+            const messagesData = await chatbotAPI.getHistory(null, 100)
+            const sessionMessages = messagesData
+              .find(s => s.sessionId === sessionId)
+              ?.messages || []
+            setMessages(sessionMessages)
+          } catch (e) {
+            console.error('Failed to load messages', e)
+            setMessages([])
+          }
+        }
+      }
     } catch (error) {
       console.error('Failed to load session details', error)
-      toast.error('Failed to load session details')
+      toast.error(error.message || 'Failed to load session details')
+      // Try to at least set the session from the list
+      const session = sessions.find(s => s.sessionId === sessionId)
+      if (session) {
+        setSelectedSession(session)
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -223,46 +250,95 @@ export const ChatHistory = () => {
           {/* Messages View */}
           <div className="lg:col-span-1">
             <Card>
-              {selectedSession ? (
+              {loading && selectedSession ? (
+                <div className="text-center py-12">
+                  <div className="inline-block animate-spin text-primary-600 text-4xl mb-4">⟳</div>
+                  <p className="text-gray-600">Loading messages...</p>
+                </div>
+              ) : selectedSession ? (
                 <div className="space-y-4">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 mb-2">Conversation</h3>
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p><strong>User:</strong> {selectedSession.user?.name}</p>
-                      <p><strong>Status:</strong> {selectedSession.status}</p>
+                  <div className="border-b pb-3">
+                    <h3 className="font-semibold text-gray-900 mb-3">Conversation Details</h3>
+                    <div className="text-sm text-gray-600 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <UserIcon size={16} className="text-gray-400" />
+                        <span><strong>User:</strong> {selectedSession.user?.name || 'Unknown'}</span>
+                      </div>
+                      <div>
+                        <strong>Email:</strong> {selectedSession.user?.email || 'N/A'}
+                      </div>
+                      <div>
+                        <strong>Status:</strong> <Badge variant={getStatusVariant(selectedSession.status)}>{selectedSession.status}</Badge>
+                      </div>
                       {selectedSession.assignedTo && (
-                        <p><strong>Assigned to:</strong> {selectedSession.assignedTo?.name}</p>
+                        <div>
+                          <strong>Assigned to:</strong> {selectedSession.assignedTo?.name || selectedSession.assignedTo?.email}
+                        </div>
                       )}
                       {selectedSession.ticketId && (
-                        <p><strong>Ticket:</strong> #{selectedSession.ticketId}</p>
+                        <div>
+                          <strong>Ticket:</strong> <span className="text-primary-600">#{selectedSession.ticketId}</span>
+                        </div>
                       )}
+                      <div>
+                        <strong>Started:</strong> {format(new Date(selectedSession.createdAt), 'MMM dd, yyyy HH:mm')}
+                      </div>
                     </div>
                   </div>
                   <div className="border-t pt-4">
-                    <div className="space-y-3 max-h-96 overflow-y-auto">
-                      {messages.map((message, idx) => (
-                        <div
-                          key={idx}
-                          className={`p-2 rounded ${
-                            message.sender === 'user'
-                              ? 'bg-primary-50 text-primary-900'
-                              : message.sender === 'technician'
-                              ? 'bg-blue-50 text-blue-900'
-                              : 'bg-gray-50 text-gray-900'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-semibold">
-                              {message.sender === 'user' ? 'User' : message.sender === 'technician' ? 'Technician' : 'Bot'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {format(new Date(message.createdAt), 'HH:mm')}
-                            </span>
+                    <h4 className="font-semibold text-gray-900 mb-3">Messages ({messages.length})</h4>
+                    {messages.length === 0 ? (
+                      <div className="text-center py-8">
+                        <MessageSquare className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-500">No messages in this session</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                        {messages.map((message, idx) => (
+                          <div
+                            key={message._id || idx}
+                            className={`p-3 rounded-lg ${
+                              message.sender === 'user'
+                                ? 'bg-primary-50 border border-primary-200'
+                                : message.sender === 'technician'
+                                ? 'bg-blue-50 border border-blue-200'
+                                : 'bg-gray-50 border border-gray-200'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <span className={`text-xs font-semibold ${
+                                message.sender === 'user'
+                                  ? 'text-primary-700'
+                                  : message.sender === 'technician'
+                                  ? 'text-blue-700'
+                                  : 'text-gray-700'
+                              }`}>
+                                {message.sender === 'user' ? '👤 User' : message.sender === 'technician' ? '👨‍💼 Technician' : '🤖 Bot'}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {format(new Date(message.createdAt || new Date()), 'MMM dd, HH:mm')}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-900 whitespace-pre-wrap">{message.content}</p>
+                            {message.attachments && message.attachments.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {message.attachments.map((att, attIdx) => (
+                                  <a
+                                    key={attIdx}
+                                    href={`/api/uploads/${att.path}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+                                  >
+                                    📎 {att.filename}
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <p className="text-sm">{message.content}</p>
-                        </div>
-                      ))}
-                    </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               ) : (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useSSO } from '../contexts/SSOContext'
 import { useLogo } from '../contexts/LogoContext'
+import { useSound } from '../utils/soundEffects'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Mail, Lock, Shield, Sparkles, Eye, EyeOff } from 'lucide-react'
@@ -19,6 +20,7 @@ export const Login = () => {
   const { login } = useAuth()
   const { ssoSettings } = useSSO()
   const { logo, showOnLogin, loginTitle } = useLogo()
+  const { playClick, playConfirm } = useSound()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -26,39 +28,11 @@ export const Login = () => {
     setCSRFToken(csrfToken)
   }, [])
 
-  const playSound = (type = 'click') => {
-    try {
-      const audioContext = new (window.AudioContext || window.webkitAudioContext)()
-      const oscillator = audioContext.createOscillator()
-      const gainNode = audioContext.createGain()
-      
-      oscillator.connect(gainNode)
-      gainNode.connect(audioContext.destination)
-      
-      if (type === 'click') {
-        oscillator.frequency.setValueAtTime(800, audioContext.currentTime)
-        oscillator.frequency.exponentialRampToValueAtTime(400, audioContext.currentTime + 0.1)
-        gainNode.gain.setValueAtTime(0.1, audioContext.currentTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1)
-      } else if (type === 'success') {
-        oscillator.frequency.setValueAtTime(600, audioContext.currentTime)
-        oscillator.frequency.exponentialRampToValueAtTime(800, audioContext.currentTime + 0.15)
-        gainNode.gain.setValueAtTime(0.08, audioContext.currentTime)
-        gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15)
-      }
-      
-      oscillator.start(audioContext.currentTime)
-      oscillator.stop(audioContext.currentTime + 0.2)
-    } catch (error) {
-      // Silently fail if audio context is not available
-    }
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault()
     setErrors({})
     setLoading(true)
-    playSound('success')
+    playConfirm()
 
     if (!validateEmail(email)) {
       setErrors({ email: 'Please enter a valid email address' })
@@ -189,7 +163,7 @@ export const Login = () => {
                         onChange={(e) => {
                           setEmail(e.target.value)
                           setErrors({ ...errors, email: '' })
-                          if (e.target.value) playSound('click')
+                          if (e.target.value) playClick()
                         }}
                         className={`w-full px-4 py-3 pl-10 bg-white/20 backdrop-blur-sm border border-white/30 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-300 ${errors.email ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                         required
@@ -223,7 +197,7 @@ export const Login = () => {
                         onChange={(e) => {
                           setPassword(e.target.value)
                           setErrors({ ...errors, password: '' })
-                          if (e.target.value) playSound('click')
+                          if (e.target.value) playClick()
                         }}
                         className={`w-full px-4 py-3 pl-10 pr-10 bg-white/20 backdrop-blur-sm border border-white/30 rounded-xl text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all duration-300 ${errors.password ? 'border-red-500 focus:ring-red-500 focus:border-red-500' : ''}`}
                         required
@@ -232,7 +206,7 @@ export const Login = () => {
                         type="button"
                         onClick={() => {
                           setShowPassword(!showPassword)
-                          playSound('click')
+                          playClick()
                         }}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-600 hover:text-gray-900 transition-colors"
                       >
@@ -250,7 +224,7 @@ export const Login = () => {
                     <input 
                       type="checkbox" 
                       className="w-4 h-4 rounded border-gray-300 bg-white/20 text-primary-600 focus:ring-primary-500 focus:ring-offset-0 cursor-pointer transition-all duration-200 group-hover:scale-110" 
-                      onChange={() => playSound('click')}
+                      onChange={() => playClick()}
                     />
                     <span className="ml-2 text-sm text-gray-900 group-hover:text-gray-700 transition-colors">
                       Remember me
@@ -304,7 +278,7 @@ export const Login = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          playSound('click')
+                          playClick()
                           navigate('/sso/google')
                         }}
                         className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-xl hover:border-white/50 hover:bg-white/30 transition-all duration-300 group shadow-sm hover:shadow-md"
@@ -325,7 +299,7 @@ export const Login = () => {
                       <button
                         type="button"
                         onClick={() => {
-                          playSound('click')
+                          playClick()
                           navigate('/sso/azure')
                         }}
                         className="w-full flex items-center justify-center space-x-3 py-2.5 px-4 bg-white/20 backdrop-blur-sm border-2 border-white/30 rounded-xl hover:border-white/50 hover:bg-white/30 transition-all duration-300 group shadow-sm hover:shadow-md"
