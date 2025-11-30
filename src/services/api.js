@@ -226,10 +226,10 @@ export const adminAPI = {
   getLogo: async () => {
     return apiCall('/admin/logo')
   },
-  updateLogo: async (logo, filename, showOnLogin) => {
+  updateLogo: async (logo, filename, showOnLogin, loginTitle = null) => {
     return apiCall('/admin/logo', {
       method: 'POST',
-      body: JSON.stringify({ logo, filename, showOnLogin }),
+      body: JSON.stringify({ logo, filename, showOnLogin, loginTitle }),
     })
   },
   

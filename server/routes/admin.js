@@ -119,12 +119,13 @@ router.get('/logo', async (req, res) => {
   try {
     const logo = await Logo.getLogo()
     if (!logo) {
-      return res.json({ logo: null, filename: null, showOnLogin: true })
+      return res.json({ logo: null, filename: null, showOnLogin: true, loginTitle: null })
     }
     res.json({ 
       logo: logo.logo,
       filename: logo.filename,
       showOnLogin: logo.showOnLogin !== undefined ? logo.showOnLogin : true,
+      loginTitle: logo.loginTitle || null,
       createdAt: logo.createdAt,
       updatedAt: logo.updatedAt,
     })
@@ -135,7 +136,7 @@ router.get('/logo', async (req, res) => {
 
 router.post('/logo', protect, admin, async (req, res) => {
   try {
-    const { logo, filename, showOnLogin } = req.body
+    const { logo, filename, showOnLogin, loginTitle } = req.body
     
     // Find existing logo or create new one
     let existingLogo = await Logo.findOne().sort({ createdAt: -1 })
@@ -145,23 +146,37 @@ router.post('/logo', protect, admin, async (req, res) => {
       if (logo !== undefined) existingLogo.logo = logo
       if (filename) existingLogo.filename = filename
       if (showOnLogin !== undefined) existingLogo.showOnLogin = showOnLogin
+      if (loginTitle !== undefined) existingLogo.loginTitle = loginTitle || null
       await existingLogo.save()
       res.json({ 
         logo: existingLogo.logo,
-        showOnLogin: existingLogo.showOnLogin !== undefined ? existingLogo.showOnLogin : true
+        showOnLogin: existingLogo.showOnLogin !== undefined ? existingLogo.showOnLogin : true,
+        loginTitle: existingLogo.loginTitle || null
       })
     } else {
       // Create new logo if none exists
       const newLogo = await Logo.create({ 
         logo, 
         filename: filename || 'logo',
-        showOnLogin: showOnLogin !== undefined ? showOnLogin : true
+        showOnLogin: showOnLogin !== undefined ? showOnLogin : true,
+        loginTitle: loginTitle || null
       })
       res.json({ 
         logo: newLogo.logo,
-        showOnLogin: newLogo.showOnLogin
+        showOnLogin: newLogo.showOnLogin,
+        loginTitle: newLogo.loginTitle || null
       })
     }
+  } catch (error) {
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Delete logo route to remove demo logos
+router.delete('/logo', protect, admin, async (req, res) => {
+  try {
+    await Logo.deleteMany({})
+    res.json({ message: 'Logo deleted successfully' })
   } catch (error) {
     res.status(500).json({ message: error.message })
   }

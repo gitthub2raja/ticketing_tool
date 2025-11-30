@@ -34,7 +34,7 @@ const chatMessageSchema = new mongoose.Schema({
   }],
   intent: {
     type: String,
-    enum: ['create_ticket', 'check_status', 'faq', 'escalate', 'greeting', 'unknown'],
+    enum: ['create_ticket', 'check_status', 'faq', 'escalate', 'greeting', 'ticket_creation_step', 'unknown'],
     default: 'unknown',
   },
   confidence: {

@@ -18,13 +18,18 @@ export const ChatWidget = () => {
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
+  const [error, setError] = useState(null)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (isOpen && user) {
-      initializeSession()
+      // Only initialize if we don't have a session yet
+      if (!session) {
+        initializeSession()
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, user])
 
   useEffect(() => {
@@ -37,12 +42,19 @@ export const ChatWidget = () => {
 
   const initializeSession = async () => {
     try {
+      setLoading(true)
+      setError(null)
       const data = await chatbotAPI.createSession('web')
       setSession(data.session)
       setMessages(data.messages || [])
     } catch (error) {
       console.error('Failed to initialize chat session', error)
-      toast.error('Failed to initialize chat')
+      const errorMessage = error?.message || error?.response?.data?.message || 'Failed to initialize chat'
+      setError(errorMessage)
+      toast.error(errorMessage)
+      // Don't close the chat, allow user to retry
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -71,7 +83,8 @@ export const ChatWidget = () => {
         }
       } catch (error) {
         console.error('Failed to initialize session', error)
-        toast.error('Failed to initialize chat session')
+        const errorMessage = error?.message || error?.response?.data?.message || 'Failed to initialize chat session'
+        toast.error(errorMessage)
         return
       }
     }
@@ -130,8 +143,9 @@ export const ChatWidget = () => {
   const handleQuickAction = async (action) => {
     switch (action) {
       case 'Create Ticket':
-        // Navigate to create ticket page or open modal
-        window.location.href = '/tickets/new'
+      case 'Create Another Ticket':
+        // Start ticket creation flow in chat
+        await sendMessage('create ticket')
         break
       case 'Check Status':
         await sendMessage('Show all my open tickets')
@@ -143,7 +157,12 @@ export const ChatWidget = () => {
         await sendMessage('What are common support questions?')
         break
       default:
-        await sendMessage(action)
+        // Handle category/priority selections
+        if (['Low', 'Medium', 'High', 'Urgent'].includes(action)) {
+          await sendMessage(action.toLowerCase())
+        } else {
+          await sendMessage(action)
+        }
     }
   }
 
@@ -217,13 +236,33 @@ export const ChatWidget = () => {
 
           {!isMinimized && (
             <>
+              {/* Error Banner */}
+              {error && (
+                <div className="bg-red-50 border-b border-red-200 px-4 py-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-red-800 text-sm">
+                    <span>⚠️ {error}</span>
+                  </div>
+                  <button
+                    onClick={initializeSession}
+                    className="text-red-600 hover:text-red-800 text-sm font-medium underline"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
-                {messages.length === 0 && (
+                {messages.length === 0 && !loading && !error && (
                   <div className="text-center text-gray-500 py-8">
                     <MessageSquare className="mx-auto h-12 w-12 text-gray-400 mb-2" />
                     <p>Start a conversation!</p>
                     <p className="text-sm mt-2">I can help you create tickets, check status, and answer questions.</p>
+                  </div>
+                )}
+                {loading && messages.length === 0 && (
+                  <div className="text-center text-gray-500 py-8">
+                    <div className="animate-spin mx-auto h-8 w-8 border-4 border-primary-600 border-t-transparent rounded-full mb-2"></div>
+                    <p>Initializing chat...</p>
                   </div>
                 )}
 

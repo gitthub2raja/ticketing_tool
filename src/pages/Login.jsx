@@ -18,7 +18,7 @@ export const Login = () => {
   const [showPassword, setShowPassword] = useState(false)
   const { login } = useAuth()
   const { ssoSettings } = useSSO()
-  const { logo, showOnLogin } = useLogo()
+  const { logo, showOnLogin, loginTitle } = useLogo()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -156,14 +156,16 @@ export const Login = () => {
             )}
 
             {/* Welcome Message */}
-            <div className="text-center mb-8">
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                Welcome to Rezilyens
-              </h1>
-              <p className="text-sm text-gray-700">
-                Log in to access your ticketing system
-              </p>
-            </div>
+            {loginTitle && (
+              <div className="text-center mb-8">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                  {loginTitle}
+                </h1>
+                <p className="text-sm text-gray-700">
+                  Log in to access your ticketing system
+                </p>
+              </div>
+            )}
 
               {/* Login Form */}
               <form onSubmit={handleSubmit} className="space-y-5">

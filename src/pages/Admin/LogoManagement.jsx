@@ -13,8 +13,9 @@ export const LogoManagement = () => {
   const [logoPreview, setLogoPreview] = useState('/logo.svg')
   const [logoUrl, setLogoUrl] = useState('')
   const [showOnLogin, setShowOnLogin] = useState(true)
+  const [loginTitle, setLoginTitle] = useState('')
   const [loading, setLoading] = useState(false)
-  const { updateLogo, updateShowOnLogin, reloadLogo } = useLogo()
+  const { updateLogo, updateShowOnLogin, updateLoginTitle, reloadLogo } = useLogo()
 
   useEffect(() => {
     loadLogo()
@@ -25,12 +26,20 @@ export const LogoManagement = () => {
       const response = await adminAPI.getLogo()
       if (response.logo) {
         setLogoPreview(response.logo)
+      } else {
+        // Use default logo if no logo in database
+        setLogoPreview('/logo.svg')
       }
       if (response.showOnLogin !== undefined) {
         setShowOnLogin(response.showOnLogin)
       }
+      if (response.loginTitle !== undefined) {
+        setLoginTitle(response.loginTitle || '')
+      }
     } catch (error) {
       console.error('Failed to load logo:', error)
+      // Fallback to default logo on error
+      setLogoPreview('/logo.svg')
     }
   }
 
@@ -70,10 +79,11 @@ export const LogoManagement = () => {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo', showOnLogin)
+      await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo', showOnLogin, loginTitle || null)
       // Update logo in context to reflect changes immediately
       updateLogo(logoPreview)
       updateShowOnLogin(showOnLogin)
+      updateLoginTitle(loginTitle || null)
       // Reload logo from server to ensure consistency
       await reloadLogo()
       toast.success('Logo settings saved successfully!')
@@ -186,6 +196,26 @@ export const LogoManagement = () => {
                 </Button>
               )}
             </div>
+          </div>
+
+          {/* Login Title Section */}
+          <div className="mt-6 p-4 bg-gradient-to-r from-primary-50/50 to-primary-100/30 rounded-xl border border-primary-200/50 backdrop-blur-sm">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Login Page Welcome Title (Optional)
+            </label>
+            <p className="text-xs text-gray-600 mb-3">
+              Enter a custom welcome title to display on the login page. Leave empty to hide the title.
+            </p>
+            <Input
+              type="text"
+              placeholder="e.g., Welcome to Rezilyens"
+              value={loginTitle}
+              onChange={(e) => setLoginTitle(e.target.value)}
+              className="w-full"
+            />
+            <p className="text-xs text-gray-500 mt-2">
+              {loginTitle ? `Title will show as: "${loginTitle}"` : 'No title will be displayed on login page'}
+            </p>
           </div>
         </Card>
 

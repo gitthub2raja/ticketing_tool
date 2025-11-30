@@ -29,10 +29,10 @@ router.post('/session', protect, async (req, res) => {
     if (!session) {
       session = await ChatSession.create({
         user: req.user._id,
-        organization: req.user.organization,
+        organization: req.user.organization || null,
         metadata: {
-          userAgent: req.headers['user-agent'],
-          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] || 'unknown',
+          ipAddress: req.ip || 'unknown',
           platform: req.body.platform || 'web',
         },
       })
@@ -84,13 +84,40 @@ router.post('/message', protect, upload.array('attachments', 5), async (req, res
     if (!session) {
       session = await ChatSession.create({
         user: req.user._id,
-        organization: req.user.organization,
+        organization: req.user.organization || null,
         metadata: {
-          userAgent: req.headers['user-agent'],
-          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] || 'unknown',
+          ipAddress: req.ip || 'unknown',
           platform: req.body.platform || 'web',
+          conversationState: 'idle',
+          ticketDraft: {},
+          currentStep: 0,
         },
       })
+    }
+
+    // Ensure metadata structure exists
+    if (!session.metadata) {
+      session.metadata = {
+        userAgent: req.headers['user-agent'] || 'unknown',
+        ipAddress: req.ip || 'unknown',
+        platform: req.body.platform || 'web',
+        conversationState: 'idle',
+        ticketDraft: {},
+        currentStep: 0,
+      }
+      await session.save()
+    } else {
+      // Ensure nested properties exist
+      if (!session.metadata.conversationState) {
+        session.metadata.conversationState = 'idle'
+      }
+      if (!session.metadata.ticketDraft) {
+        session.metadata.ticketDraft = {}
+      }
+      if (session.metadata.currentStep === undefined || session.metadata.currentStep === null) {
+        session.metadata.currentStep = 0
+      }
     }
 
     // Handle attachments
@@ -111,11 +138,17 @@ router.post('/message', protect, upload.array('attachments', 5), async (req, res
       attachments,
     })
 
-    // Detect intent
-    const intent = await detectIntent(message || 'file', req.user._id, req.user.organization)
+    // Reload session to ensure we have latest metadata before intent detection
+    const currentSession = await ChatSession.findById(session._id)
+    if (!currentSession) {
+      return res.status(404).json({ message: 'Session not found' })
+    }
 
-    // Generate bot response
-    const botResponse = await generateResponse(intent, session, message || 'file', req.user._id)
+    // Detect intent (pass fresh session for conversation state)
+    const intent = await detectIntent(message || 'file', req.user._id, req.user.organization, currentSession)
+
+    // Generate bot response (use fresh session)
+    const botResponse = await generateResponse(intent, currentSession, message || 'file', req.user._id)
 
     // Create bot message
     const botMessage = await ChatMessage.create({
@@ -128,9 +161,11 @@ router.post('/message', protect, upload.array('attachments', 5), async (req, res
       metadata: botResponse.metadata || {},
     })
 
-    // Update session
-    session.messages.push(userMessage._id, botMessage._id)
-    await session.save()
+    // Update session - use currentSession that was already reloaded
+    if (currentSession) {
+      currentSession.messages.push(userMessage._id, botMessage._id)
+      await currentSession.save()
+    }
 
     res.json({
       userMessage,

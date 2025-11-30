@@ -13,6 +13,10 @@ const logoSchema = new mongoose.Schema({
     type: Boolean,
     default: true, // Show logo on login page by default
   },
+  loginTitle: {
+    type: String,
+    default: null, // Optional welcome title for login page
+  },
 }, {
   timestamps: true,
 })

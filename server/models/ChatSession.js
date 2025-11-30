@@ -3,7 +3,6 @@ import mongoose from 'mongoose'
 const chatSessionSchema = new mongoose.Schema({
   sessionId: {
     type: String,
-    required: true,
     unique: true,
     index: true,
   },
@@ -52,9 +51,12 @@ const chatSessionSchema = new mongoose.Schema({
     ref: 'ChatMessage',
   }],
   metadata: {
-    userAgent: String,
-    ipAddress: String,
-    platform: String, // web, mobile
+    type: mongoose.Schema.Types.Mixed,
+    default: () => ({
+      conversationState: 'idle',
+      ticketDraft: {},
+      currentStep: 0,
+    }),
   },
   escalatedAt: {
     type: Date,
@@ -68,8 +70,16 @@ const chatSessionSchema = new mongoose.Schema({
   timestamps: true,
 })
 
-// Generate unique session ID
+// Generate unique session ID if not provided (backup for pre-save)
 chatSessionSchema.pre('save', async function(next) {
+  if (!this.sessionId) {
+    this.sessionId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  }
+  next()
+})
+
+// Also ensure sessionId is set on create
+chatSessionSchema.pre('validate', function(next) {
   if (!this.sessionId) {
     this.sessionId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
   }

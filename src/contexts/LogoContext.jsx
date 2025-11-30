@@ -14,6 +14,7 @@ export const useLogo = () => {
 export const LogoProvider = ({ children }) => {
   const [logo, setLogo] = useState('/logo.svg') // Default fallback
   const [showOnLogin, setShowOnLogin] = useState(true) // Default to showing on login
+  const [loginTitle, setLoginTitle] = useState(null) // Welcome title for login page
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -25,13 +26,20 @@ export const LogoProvider = ({ children }) => {
       const response = await adminAPI.getLogo()
       if (response.logo) {
         setLogo(response.logo)
+      } else {
+        // Use default logo if no logo in database
+        setLogo('/logo.svg')
       }
       if (response.showOnLogin !== undefined) {
         setShowOnLogin(response.showOnLogin)
       }
+      if (response.loginTitle !== undefined) {
+        setLoginTitle(response.loginTitle)
+      }
     } catch (error) {
       console.error('Failed to load logo:', error)
       // Keep default logo on error
+      setLogo('/logo.svg')
     } finally {
       setLoading(false)
     }
@@ -45,13 +53,19 @@ export const LogoProvider = ({ children }) => {
     setShowOnLogin(value)
   }
 
+  const updateLoginTitle = (value) => {
+    setLoginTitle(value)
+  }
+
   return (
     <LogoContext.Provider value={{ 
       logo, 
       showOnLogin, 
+      loginTitle,
       loading, 
       updateLogo, 
       updateShowOnLogin,
+      updateLoginTitle,
       reloadLogo: loadLogo 
     }}>
       {children}

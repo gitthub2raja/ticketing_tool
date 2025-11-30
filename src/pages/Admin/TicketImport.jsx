@@ -209,6 +209,7 @@ export const TicketImport = () => {
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
+                onClick={() => document.getElementById('file-upload')?.click()}
               >
                 <input
                   type="file"
@@ -220,6 +221,7 @@ export const TicketImport = () => {
                 <label
                   htmlFor="file-upload"
                   className="cursor-pointer flex flex-col items-center"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <Upload
                     className={`mb-2 transition-colors ${
