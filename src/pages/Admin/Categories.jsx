@@ -52,7 +52,9 @@ export const Categories = () => {
   }
 
   const handleOpenModal = (category = null) => {
+    console.log('handleOpenModal called with:', category)
     if (category) {
+      console.log('Setting editing category:', category)
       setEditingCategory(category)
       setFormData({
         name: category.name,
@@ -71,6 +73,7 @@ export const Categories = () => {
         status: 'active',
       })
     }
+    console.log('Opening modal, isModalOpen will be set to true')
     setIsModalOpen(true)
   }
 
@@ -95,7 +98,14 @@ export const Categories = () => {
       }
       
       if (editingCategory) {
-        await categoriesAPI.update(editingCategory._id || editingCategory.id, submitData)
+        const categoryId = editingCategory._id || editingCategory.id
+        if (!categoryId) {
+          toast.error('Invalid category ID')
+          console.error('No category ID found:', editingCategory)
+          return
+        }
+        console.log('Updating category:', categoryId, submitData)
+        await categoriesAPI.update(categoryId, submitData)
         toast.success('Category updated successfully!')
       } else {
         await categoriesAPI.create(submitData)
@@ -104,17 +114,28 @@ export const Categories = () => {
       handleCloseModal()
       loadCategories()
     } catch (error) {
+      console.error('Error saving category:', error)
       toast.error(error.message || 'Failed to save category')
     }
   }
 
   const handleDelete = async (categoryId) => {
+    console.log('handleDelete called with ID:', categoryId)
+    if (!categoryId) {
+      console.error('No category ID provided')
+      toast.error('Invalid category ID')
+      return
+    }
+    
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
+        console.log('Calling API to delete category:', categoryId)
         await categoriesAPI.delete(categoryId)
+        console.log('Category deleted successfully')
         toast.success('Category deleted successfully!')
         loadCategories()
       } catch (error) {
+        console.error('Error deleting category:', error)
         toast.error(error.message || 'Failed to delete category')
       }
     }
@@ -192,16 +213,57 @@ export const Categories = () => {
                       <p className="text-xs text-cyber-neon-cyan/50 font-mono">
                         {format(new Date(category.createdAt), 'MMM dd, yyyy')}
                       </p>
-                      <div className="flex items-center space-x-2">
+                      <div 
+                        className="flex items-center space-x-2"
+                        style={{ 
+                          position: 'relative',
+                          zIndex: 1000,
+                          pointerEvents: 'auto'
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                        }}
+                      >
                         <button
-                          onClick={() => handleOpenModal(category)}
-                          className="text-cyber-neon-cyan hover:text-cyber-neon-cyan transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            console.log('Edit button clicked for category:', category)
+                            handleOpenModal(category)
+                          }}
+                          className="text-cyber-neon-cyan hover:text-cyber-neon-cyan transition-colors p-2 rounded hover:bg-cyber-neon-cyan/10 cursor-pointer"
+                          title="Edit Category"
+                          style={{ 
+                            pointerEvents: 'auto',
+                            position: 'relative',
+                            zIndex: 1001
+                          }}
                         >
                           <Edit size={18} />
                         </button>
                         <button
-                          onClick={() => handleDelete(category._id || category.id)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            console.log('Delete button clicked for category:', category)
+                            const categoryId = category._id || category.id
+                            console.log('Category ID:', categoryId)
+                            if (categoryId) {
+                              handleDelete(categoryId)
+                            } else {
+                              console.error('Invalid category ID:', category)
+                              toast.error('Invalid category ID')
+                            }
+                          }}
+                          className="text-red-400 hover:text-red-300 transition-colors p-2 rounded hover:bg-red-400/10 cursor-pointer"
+                          title="Delete Category"
+                          style={{ 
+                            pointerEvents: 'auto',
+                            position: 'relative',
+                            zIndex: 1001
+                          }}
                         >
                           <Trash2 size={18} />
                         </button>

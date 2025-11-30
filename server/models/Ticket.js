@@ -27,8 +27,26 @@ const ticketSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['open', 'in-progress', 'resolved', 'closed'],
+    enum: ['open', 'approval-pending', 'approved', 'rejected', 'in-progress', 'resolved', 'closed'],
     default: 'open',
+  },
+  department: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Department',
+    default: null,
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  approvedAt: {
+    type: Date,
+    default: null,
+  },
+  rejectionReason: {
+    type: String,
+    trim: true,
   },
   creator: {
     type: mongoose.Schema.Types.ObjectId,
@@ -82,6 +100,43 @@ const ticketSchema = new mongoose.Schema({
   dueDate: {
     type: Date,
     default: null,
+  },
+  responseDueDate: {
+    type: Date,
+    default: null,
+  },
+  slaResponseTime: {
+    type: Number, // in hours
+    default: null,
+  },
+  slaResolutionTime: {
+    type: Number, // in hours
+    default: null,
+  },
+  // SLA tracking fields
+  slaResponseBreached: {
+    type: Boolean,
+    default: false,
+  },
+  slaResponseBreachedAt: {
+    type: Date,
+    default: null,
+  },
+  slaResponseWarningSent: {
+    type: Boolean,
+    default: false,
+  },
+  slaResolutionBreached: {
+    type: Boolean,
+    default: false,
+  },
+  slaResolutionBreachedAt: {
+    type: Date,
+    default: null,
+  },
+  slaResolutionWarningSent: {
+    type: Boolean,
+    default: false,
   },
   attachments: [{
     filename: {

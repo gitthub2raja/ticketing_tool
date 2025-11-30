@@ -10,7 +10,7 @@ import { Modal } from '../../components/ui/Modal'
 import { useAuth } from '../../contexts/AuthContext'
 import { ticketsAPI, categoriesAPI, usersAPI } from '../../services/api'
 import { sendTicketCreatedEmail } from '../../services/emailService'
-import { Calendar, Upload, X, File } from 'lucide-react'
+import { Upload, X, File } from 'lucide-react'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
@@ -22,14 +22,12 @@ export const NewTicket = () => {
     category: '',
     priority: '',
     assignee: '',
-    dueDate: '',
     ticketId: '', // Optional manual ticket ID
   })
   const [categories, setCategories] = useState([])
   const [assignees, setAssignees] = useState([])
   const [showTicketId, setShowTicketId] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [isDateModalOpen, setIsDateModalOpen] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
   const navigate = useNavigate()
 
@@ -90,19 +88,24 @@ export const NewTicket = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    e.stopPropagation()
+    
+    // Validate required fields
+    if (!formData.title || !formData.description || !formData.category || !formData.priority) {
+      toast.error('Please fill in all required fields')
+      return
+    }
+
     setLoading(true)
 
     try {
       // Create FormData for file upload
       const formDataToSend = new FormData()
-      formDataToSend.append('title', formData.title)
-      formDataToSend.append('description', formData.description)
+      formDataToSend.append('title', formData.title.trim())
+      formDataToSend.append('description', formData.description.trim())
       formDataToSend.append('category', formData.category)
       formDataToSend.append('priority', formData.priority)
       if (formData.assignee) formDataToSend.append('assignee', formData.assignee)
-      if (formData.dueDate) {
-        formDataToSend.append('dueDate', new Date(formData.dueDate + 'T00:00:00').toISOString())
-      }
       if (formData.ticketId && formData.ticketId.trim() !== '') {
         formDataToSend.append('ticketId', parseInt(formData.ticketId))
       }
@@ -117,19 +120,24 @@ export const NewTicket = () => {
       // Send email notification to user
       if (user?.email) {
         try {
-        await sendTicketCreatedEmail(ticket, user.email)
+          await sendTicketCreatedEmail(ticket, user.email)
           toast.success(`Ticket #${ticket.ticketId} created successfully! Email notification sent.`)
         } catch (emailError) {
+          console.error('Email error:', emailError)
           toast.success(`Ticket #${ticket.ticketId} created successfully!`)
         }
       } else {
         toast.success(`Ticket #${ticket.ticketId} created successfully!`)
       }
 
-      navigate(`/tickets/${ticket.ticketId}`)
+      // Navigate after a short delay to ensure toast is visible
+      setTimeout(() => {
+        navigate(`/tickets/${ticket.ticketId}`)
+      }, 500)
     } catch (error) {
-      toast.error(error.message || 'Failed to create ticket. Please try again.')
-    } finally {
+      console.error('Ticket creation error:', error)
+      const errorMessage = error.message || 'Failed to create ticket. Please try again.'
+      toast.error(errorMessage)
       setLoading(false)
     }
   }
@@ -150,7 +158,7 @@ export const NewTicket = () => {
         </div>
 
         <Card>
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             {/* Optional: Manual Ticket ID (for first-time setup) */}
             <div className="mb-4">
               <button
@@ -228,73 +236,19 @@ export const NewTicket = () => {
               />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Select
-                name="assignee"
-                label="Assignee (Optional)"
-                value={formData.assignee}
-                onChange={handleChange}
-                options={[
-                  { value: '', label: 'Unassigned' },
-                  ...assignees.map(user => ({
-                    value: user._id || user.id,
-                    label: user.name,
-                  })),
-                ]}
-              />
-
-              <div>
-                <label className="block text-sm font-cyber font-semibold text-cyber-neon-cyan mb-2 uppercase tracking-wider">
-                  Due Date (Optional)
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setIsDateModalOpen(true)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-cyber-darker/50 border-2 border-cyber-neon-cyan/30 rounded-lg text-cyber-neon-cyan hover:border-cyber-neon-cyan transition-all duration-300"
-                >
-                  <span className="flex items-center space-x-2">
-                    <Calendar size={16} />
-                    <span>{formData.dueDate ? format(new Date(formData.dueDate + 'T00:00:00'), 'MMM dd, yyyy') : 'Select Due Date'}</span>
-                  </span>
-                  <Calendar size={16} className="opacity-50" />
-                </button>
-                
-                <Modal
-                  isOpen={isDateModalOpen}
-                  onClose={() => setIsDateModalOpen(false)}
-                  title="Select Due Date"
-                  size="sm"
-                  footer={
-                    <div className="flex space-x-3">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setFormData({ ...formData, dueDate: '' })
-                          setIsDateModalOpen(false)
-                        }}
-                      >
-                        Clear
-                      </Button>
-                      <Button
-                        onClick={() => setIsDateModalOpen(false)}
-                      >
-                        Set Date
-                      </Button>
-                    </div>
-                  }
-                >
-                  <div className="py-4">
-                    <input
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-                      className="input w-full text-center text-lg"
-                      min={new Date().toISOString().slice(0, 10)}
-                    />
-                  </div>
-                </Modal>
-              </div>
-            </div>
+            <Select
+              name="assignee"
+              label="Assignee (Optional)"
+              value={formData.assignee}
+              onChange={handleChange}
+              options={[
+                { value: '', label: 'Unassigned' },
+                ...assignees.map(user => ({
+                  value: user._id || user.id,
+                  label: user.name,
+                })),
+              ]}
+            />
 
             {/* File Upload Section */}
             <div>

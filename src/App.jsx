@@ -3,7 +3,6 @@ import { Toaster } from 'react-hot-toast'
 import { AuthProvider } from './contexts/AuthContext'
 import { SSOProvider } from './contexts/SSOContext'
 import { LogoProvider } from './contexts/LogoContext'
-import { ThemeProvider, useTheme } from './contexts/ThemeContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ErrorBoundary } from './components/ErrorBoundary'
 
@@ -17,6 +16,7 @@ import { MFALogin } from './pages/MFALogin'
 // Main Pages
 import { Dashboard } from './pages/Dashboard'
 import { TicketList } from './pages/Tickets/TicketList'
+import { TicketSearch } from './pages/Tickets/TicketSearch'
 import { NewTicket } from './pages/Tickets/NewTicket'
 import { TicketDetail } from './pages/Tickets/TicketDetail'
 import { Profile } from './pages/Profile'
@@ -30,66 +30,76 @@ import { SSOConfig } from './pages/Admin/SSOConfig'
 import { LogoManagement } from './pages/Admin/LogoManagement'
 import { Organizations } from './pages/Admin/Organizations'
 import { Categories } from './pages/Admin/Categories'
+import { SLAPolicies } from './pages/Admin/SLAPolicies'
+import { Departments } from './pages/Admin/Departments'
+import { TicketImport } from './pages/Admin/TicketImport'
+import { Analytics } from './pages/Admin/Analytics'
+import { ApiKeys } from './pages/Admin/ApiKeys'
+import { EmailAutomation } from './pages/Admin/EmailAutomation'
+import { TeamsIntegration } from './pages/Admin/TeamsIntegration'
+import { FAQ } from './pages/Admin/FAQ'
+import { ChatHistory } from './pages/Admin/ChatHistory'
 
-const AppContent = () => {
-  const { theme } = useTheme()
-  const isDark = theme === 'dark'
+// Reports Page
+import { Reports } from './pages/Reports'
 
+// Department Head Dashboard
+import { DepartmentHeadDashboard } from './pages/DepartmentHead/Dashboard'
+
+// Components
+import { ChatWidget } from './components/ChatWidget'
+
+function App() {
   return (
-    <Router>
-      <ErrorBoundary>
-        <div className="App">
-          <Toaster 
-            position="top-right"
-            toastOptions={{
-              duration: 4000,
-              style: {
-                background: isDark ? '#0a0e27' : '#ffffff',
-                color: isDark ? '#00ffff' : '#1e293b',
-                border: isDark 
-                  ? '2px solid rgba(0, 255, 255, 0.3)' 
-                  : '2px solid rgba(37, 99, 235, 0.3)',
-                borderRadius: '12px',
-                fontFamily: 'Orbitron, monospace',
-                boxShadow: isDark
-                  ? '0 0 20px rgba(0, 255, 255, 0.3), 0 8px 32px rgba(0, 0, 0, 0.3)'
-                  : '0 0 20px rgba(37, 99, 235, 0.2), 0 8px 32px rgba(0, 0, 0, 0.1)',
-                backdropFilter: 'blur(20px)',
-              },
-              success: {
-                duration: 3000,
-                iconTheme: {
-                  primary: '#059669',
-                  secondary: isDark ? '#0a0e27' : '#ffffff',
-                },
-                style: {
-                  border: '2px solid rgba(5, 150, 105, 0.4)',
-                  boxShadow: isDark
-                    ? '0 0 20px rgba(5, 150, 105, 0.4), 0 8px 32px rgba(0, 0, 0, 0.3)'
-                    : '0 0 20px rgba(5, 150, 105, 0.3), 0 8px 32px rgba(0, 0, 0, 0.1)',
-                },
-              },
-              error: {
+    <AuthProvider>
+      <SSOProvider>
+        <LogoProvider>
+          <Router>
+          <ErrorBoundary>
+          <div className="App">
+            <ChatWidget />
+            <Toaster 
+              position="top-right"
+              toastOptions={{
                 duration: 4000,
-                iconTheme: {
-                  primary: '#ef4444',
-                  secondary: isDark ? '#0a0e27' : '#ffffff',
-                },
                 style: {
-                  border: '2px solid rgba(239, 68, 68, 0.4)',
-                  boxShadow: isDark
-                    ? '0 0 20px rgba(239, 68, 68, 0.4), 0 8px 32px rgba(0, 0, 0, 0.3)'
-                    : '0 0 20px rgba(239, 68, 68, 0.3), 0 8px 32px rgba(0, 0, 0, 0.1)',
+                  background: '#ffffff',
+                  color: '#111827',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '0.5rem',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+                  padding: '12px 16px',
                 },
-              },
-            }}
-          />
+                success: {
+                  duration: 3000,
+                  iconTheme: {
+                    primary: '#10b981',
+                    secondary: '#ffffff',
+                  },
+                  style: {
+                    border: '1px solid #d1fae5',
+                    background: '#f0fdf4',
+                  },
+                },
+                error: {
+                  duration: 4000,
+                  iconTheme: {
+                    primary: '#ef4444',
+                    secondary: '#ffffff',
+                  },
+                  style: {
+                    border: '1px solid #fee2e2',
+                    background: '#fef2f2',
+                  },
+                },
+              }}
+            />
             <Routes>
               {/* Public Routes */}
-              <Route path="/login" element={<Login />} />
-              <Route path="/mfa-login" element={<MFALogin />} />
-              <Route path="/sso/azure" element={<AzureLogin />} />
-              <Route path="/sso/google" element={<GoogleWorkspaceLogin />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/mfa-login" element={<MFALogin />} />
+            <Route path="/sso/azure" element={<AzureLogin />} />
+            <Route path="/sso/google" element={<GoogleWorkspaceLogin />} />
 
             {/* Protected Routes */}
             <Route
@@ -105,6 +115,14 @@ const AppContent = () => {
               element={
                 <ProtectedRoute>
                   <TicketList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets/search"
+              element={
+                <ProtectedRoute>
+                  <TicketSearch />
                 </ProtectedRoute>
               }
             />
@@ -148,6 +166,14 @@ const AppContent = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/reports"
+              element={
+                <ProtectedRoute>
+                  <Reports />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin Routes */}
             <Route
@@ -183,10 +209,34 @@ const AppContent = () => {
               }
             />
             <Route
+              path="/admin/sla"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <SLAPolicies />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/departments"
+              element={
+                <ProtectedRoute>
+                  <Departments />
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/admin/email"
               element={
                 <ProtectedRoute requireAdmin>
                   <EmailSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/department-head/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DepartmentHeadDashboard />
                 </ProtectedRoute>
               }
             />
@@ -206,28 +256,73 @@ const AppContent = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/tickets/import"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <TicketImport />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/analytics"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/api-keys"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ApiKeys />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/email-automation"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <EmailAutomation />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/faq"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FAQ />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/chat-history"
+              element={
+                <ProtectedRoute>
+                  <ChatHistory />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/teams-integration"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <TeamsIntegration />
+                </ProtectedRoute>
+              }
+            />
 
             {/* Default Route */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
-      </ErrorBoundary>
-    </Router>
-  )
-}
-
-function App() {
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <SSOProvider>
-          <LogoProvider>
-            <AppContent />
-          </LogoProvider>
-        </SSOProvider>
-      </AuthProvider>
-    </ThemeProvider>
+        </ErrorBoundary>
+      </Router>
+        </LogoProvider>
+      </SSOProvider>
+    </AuthProvider>
   )
 }
 

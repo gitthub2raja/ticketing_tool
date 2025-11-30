@@ -9,6 +9,10 @@ const logoSchema = new mongoose.Schema({
     type: String,
     default: 'logo',
   },
+  showOnLogin: {
+    type: Boolean,
+    default: true, // Show logo on login page by default
+  },
 }, {
   timestamps: true,
 })

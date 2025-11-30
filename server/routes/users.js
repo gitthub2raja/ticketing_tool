@@ -41,6 +41,7 @@ router.get('/', protect, admin, async (req, res) => {
     const users = await User.find(query)
       .select('-password')
       .populate('organization', 'name')
+      .populate('department', 'name')
       .sort({ createdAt: -1 })
     res.json(users)
   } catch (error) {
@@ -68,7 +69,7 @@ router.get('/:id', protect, async (req, res) => {
 // @access  Private/Admin
 router.post('/', protect, admin, async (req, res) => {
   try {
-    const { name, email, password, role, status, organization } = req.body
+    const { name, email, password, role, status, organization, department } = req.body
 
     if (!password) {
       return res.status(400).json({ message: 'Password is required' })
@@ -90,11 +91,39 @@ router.post('/', protect, admin, async (req, res) => {
       role: role || 'user',
       status: status || 'active',
       organization,
+      department: department || null,
     })
 
     const populatedUser = await User.findById(user._id)
       .select('-password')
       .populate('organization', 'name')
+      .populate('department', 'name')
+
+    // Send welcome email to new user (async, don't wait)
+    if (populatedUser.email) {
+      import('../services/emailService.js').then(({ sendEmail }) => {
+        const subject = 'Welcome to Ticketing Tool'
+        const html = `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #1f2937;">Welcome to Ticketing Tool!</h2>
+            <p>Hello ${populatedUser.name},</p>
+            <p>Your account has been created successfully.</p>
+            <div style="background: #f9fafb; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <p><strong>Email:</strong> ${populatedUser.email}</p>
+              <p><strong>Role:</strong> ${populatedUser.role}</p>
+              <p><strong>Organization:</strong> ${populatedUser.organization?.name || 'N/A'}</p>
+              ${populatedUser.department ? `<p><strong>Department:</strong> ${populatedUser.department.name}</p>` : ''}
+            </div>
+            <p>You can now log in to the system and start creating tickets.</p>
+            <p><a href="${process.env.FRONTEND_URL || 'http://localhost'}/login" style="background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block;">Login to Ticketing Tool</a></p>
+            <p>Best regards,<br>Support Team</p>
+          </div>
+        `
+        sendEmail(populatedUser.email, subject, html).catch(err => {
+          console.error('Welcome email error:', err)
+        })
+      })
+    }
 
     res.status(201).json({
       id: populatedUser._id,
@@ -120,7 +149,7 @@ router.put('/:id', protect, admin, async (req, res) => {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    const { name, email, role, status, password, organization } = req.body
+    const { name, email, role, status, password, organization, department } = req.body
 
     if (name) user.name = name
     if (email) user.email = email
@@ -128,21 +157,16 @@ router.put('/:id', protect, admin, async (req, res) => {
     if (status) user.status = status
     if (password) user.password = password
     if (organization) user.organization = organization
+    if (department !== undefined) user.department = department || null
 
     await user.save()
 
     const updatedUser = await User.findById(user._id)
       .select('-password')
       .populate('organization', 'name')
+      .populate('department', 'name')
 
-    res.json({
-      id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-      role: updatedUser.role,
-      status: updatedUser.status,
-      organization: updatedUser.organization,
-    })
+    res.json(updatedUser)
   } catch (error) {
     res.status(500).json({ message: error.message })
   }

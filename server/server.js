@@ -7,6 +7,8 @@ import { dirname } from 'path'
 import connectDB from './config/database.js'
 import createDemoData from './scripts/initDemoData.js'
 import { startEmailWorker } from './workers/emailWorker.js'
+import { startSLAWorker } from './workers/slaWorker.js'
+import { startEmailAutomationWorker } from './workers/emailAutomationWorker.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
@@ -20,6 +22,14 @@ import mfaRoutes from './routes/mfa.js'
 import emailRoutes from './routes/email.js'
 import organizationRoutes from './routes/organizations.js'
 import categoryRoutes from './routes/categories.js'
+import departmentRoutes from './routes/departments.js'
+import reportRoutes from './routes/reports.js'
+import apiKeyRoutes from './routes/apiKeys.js'
+import emailTemplateRoutes from './routes/emailTemplates.js'
+import emailAutomationRoutes from './routes/emailAutomation.js'
+import chatbotRoutes from './routes/chatbot.js'
+import faqRoutes from './routes/faq.js'
+import teamsRoutes from './routes/teams.js'
 
 dotenv.config()
 
@@ -36,6 +46,16 @@ connectDB().then(() => {
   setTimeout(() => {
     startEmailWorker()
   }, 5000) // Wait 5 seconds for everything to be initialized
+  
+  // Start SLA worker after DB is ready
+  setTimeout(() => {
+    startSLAWorker()
+  }, 10000) // Wait 10 seconds for everything to be initialized
+  
+  // Start email automation worker after DB is ready
+  setTimeout(() => {
+    startEmailAutomationWorker()
+  }, 15000) // Wait 15 seconds for everything to be initialized
 })
 
 // Middleware
@@ -61,6 +81,14 @@ app.use('/api/mfa', mfaRoutes)
 app.use('/api/email', emailRoutes)
 app.use('/api/organizations', organizationRoutes)
 app.use('/api/categories', categoryRoutes)
+app.use('/api/departments', departmentRoutes)
+app.use('/api/reports', reportRoutes)
+app.use('/api/api-keys', apiKeyRoutes)
+app.use('/api/email-templates', emailTemplateRoutes)
+app.use('/api/email-automation', emailAutomationRoutes)
+app.use('/api/chatbot', chatbotRoutes)
+app.use('/api/faq', faqRoutes)
+app.use('/api/teams', teamsRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

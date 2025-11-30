@@ -144,6 +144,22 @@ export const sendTicketUpdateEmail = async (ticket, customerEmail, changes) => {
     .map(([key, value]) => `<li><strong>${key}:</strong> ${value}</li>`)
     .join('')
   
+  // Get status color
+  const getStatusColor = (status) => {
+    const colors = {
+      'open': '#3b82f6',
+      'approval-pending': '#f59e0b',
+      'approved': '#10b981',
+      'rejected': '#ef4444',
+      'in-progress': '#8b5cf6',
+      'resolved': '#10b981',
+      'closed': '#6b7280',
+    }
+    return colors[status] || '#3b82f6'
+  }
+
+  const statusColor = getStatusColor(ticket.status)
+  
   const html = `
     <!DOCTYPE html>
     <html>
@@ -151,10 +167,12 @@ export const sendTicketUpdateEmail = async (ticket, customerEmail, changes) => {
       <style>
         body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
         .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
+        .header { background: ${statusColor}; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
         .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
+        .ticket-info { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid ${statusColor}; }
         .changes { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #10b981; }
         .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
+        .button { display: inline-block; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
       </style>
     </head>
     <body>
@@ -166,10 +184,26 @@ export const sendTicketUpdateEmail = async (ticket, customerEmail, changes) => {
           <p>Dear Customer,</p>
           <p>Your ticket #${ticket.ticketId} has been updated.</p>
           
+          <div class="ticket-info">
+            <h3>Current Ticket Status:</h3>
+            <p><strong>Ticket ID:</strong> #${ticket.ticketId}</p>
+            <p><strong>Title:</strong> ${ticket.title}</p>
+            <p><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${ticket.status.toUpperCase().replace('-', ' ')}</span></p>
+            <p><strong>Priority:</strong> ${ticket.priority.toUpperCase()}</p>
+            <p><strong>Assignee:</strong> ${ticket.assignee?.name || 'Unassigned'}</p>
+            ${ticket.dueDate ? `<p><strong>Due Date:</strong> ${new Date(ticket.dueDate).toLocaleString()}</p>` : ''}
+          </div>
+          
+          ${changesHtml ? `
           <div class="changes">
-            <h3>Changes:</h3>
+            <h3>Recent Changes:</h3>
             <ul>${changesHtml}</ul>
           </div>
+          ` : ''}
+          
+          <p>You will receive email notifications for all status updates on this ticket.</p>
+          
+          <p><a href="${process.env.FRONTEND_URL || 'http://localhost'}/tickets/${ticket.ticketId}" class="button">View Ticket</a></p>
           
           <p>Best regards,<br>Support Team</p>
         </div>

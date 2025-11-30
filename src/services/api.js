@@ -122,11 +122,28 @@ export const ticketsAPI = {
       body: JSON.stringify(comment),
     })
   },
+  approveTicket: async (id) => {
+    return apiCall(`/tickets/${id}/approve`, {
+      method: 'POST',
+    })
+  },
+  rejectTicket: async (id, rejectionReason) => {
+    return apiCall(`/tickets/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ rejectionReason }),
+    })
+  },
   getDashboardStats: async (organization = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
     const query = params.toString()
     return apiCall(`/tickets/stats/dashboard${query ? `?${query}` : ''}`)
+  },
+  importTickets: async (ticketsData) => {
+    return apiCall('/tickets/import', {
+      method: 'POST',
+      body: JSON.stringify({ tickets: ticketsData }),
+    })
   },
 }
 
@@ -209,10 +226,10 @@ export const adminAPI = {
   getLogo: async () => {
     return apiCall('/admin/logo')
   },
-  updateLogo: async (logo, filename) => {
+  updateLogo: async (logo, filename, showOnLogin) => {
     return apiCall('/admin/logo', {
       method: 'POST',
-      body: JSON.stringify({ logo, filename }),
+      body: JSON.stringify({ logo, filename, showOnLogin }),
     })
   },
   
@@ -234,6 +251,29 @@ export const adminAPI = {
   },
   deleteRole: async (id) => {
     return apiCall(`/admin/roles/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  
+  // SLA Policies
+  getSLAPolicies: async (organization) => {
+    const url = organization ? `/admin/sla?organization=${organization}` : '/admin/sla'
+    return apiCall(url)
+  },
+  createSLAPolicy: async (policyData) => {
+    return apiCall('/admin/sla', {
+      method: 'POST',
+      body: JSON.stringify(policyData),
+    })
+  },
+  updateSLAPolicy: async (id, policyData) => {
+    return apiCall(`/admin/sla/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(policyData),
+    })
+  },
+  deleteSLAPolicy: async (id) => {
+    return apiCall(`/admin/sla/${id}`, {
       method: 'DELETE',
     })
   },
@@ -299,6 +339,33 @@ export const categoriesAPI = {
   },
 }
 
+// Departments API
+export const departmentsAPI = {
+  getAll: async () => {
+    return apiCall('/departments')
+  },
+  getById: async (id) => {
+    return apiCall(`/departments/${id}`)
+  },
+  create: async (departmentData) => {
+    return apiCall('/departments', {
+      method: 'POST',
+      body: JSON.stringify(departmentData),
+    })
+  },
+  update: async (id, departmentData) => {
+    return apiCall(`/departments/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(departmentData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/departments/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
 // MFA API
 export const mfaAPI = {
   getSetup: async () => {
@@ -319,6 +386,279 @@ export const mfaAPI = {
   disable: async () => {
     return apiCall('/mfa/disable', {
       method: 'POST',
+    })
+  },
+}
+
+// Reports API (Admin only)
+export const reportsAPI = {
+  getDashboard: async (period = 'month', organization = null) => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    return apiCall(`/reports/dashboard?${params.toString()}`)
+  },
+  getStatusWise: async (period = 'month', organization = null) => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    return apiCall(`/reports/status-wise?${params.toString()}`)
+  },
+  getDepartmentWise: async (period = 'month', organization = null) => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    return apiCall(`/reports/department-wise?${params.toString()}`)
+  },
+  getTechnicianPerformance: async (period = 'month', organization = null) => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    return apiCall(`/reports/technician-performance?${params.toString()}`)
+  },
+  getSLACompliance: async (period = 'month', organization = null) => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    return apiCall(`/reports/sla-compliance?${params.toString()}`)
+  },
+  getTrends: async (period = 'month', organization = null, groupBy = 'day') => {
+    const params = new URLSearchParams()
+    if (period) params.append('period', period)
+    if (organization) params.append('organization', organization)
+    if (groupBy) params.append('groupBy', groupBy)
+    return apiCall(`/reports/trends?${params.toString()}`)
+  },
+}
+
+// API Keys API (Admin only)
+export const apiKeysAPI = {
+  getAll: async (organization = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    return apiCall(`/api-keys?${params.toString()}`)
+  },
+  create: async (apiKeyData) => {
+    return apiCall('/api-keys', {
+      method: 'POST',
+      body: JSON.stringify(apiKeyData),
+    })
+  },
+  update: async (id, apiKeyData) => {
+    return apiCall(`/api-keys/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(apiKeyData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/api-keys/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  revoke: async (id) => {
+    return apiCall(`/api-keys/${id}/revoke`, {
+      method: 'POST',
+    })
+  },
+  activate: async (id) => {
+    return apiCall(`/api-keys/${id}/activate`, {
+      method: 'POST',
+    })
+  },
+}
+
+// Email Templates API (Admin only)
+export const emailTemplatesAPI = {
+  getAll: async (organization = null, type = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    if (type) params.append('type', type)
+    return apiCall(`/email-templates?${params.toString()}`)
+  },
+  getById: async (id) => {
+    return apiCall(`/email-templates/${id}`)
+  },
+  create: async (templateData) => {
+    return apiCall('/email-templates', {
+      method: 'POST',
+      body: JSON.stringify(templateData),
+    })
+  },
+  update: async (id, templateData) => {
+    return apiCall(`/email-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(templateData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/email-templates/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  preview: async (id) => {
+    return apiCall(`/email-templates/${id}/preview`, {
+      method: 'POST',
+    })
+  },
+}
+
+// Email Automation API (Admin only)
+export const emailAutomationAPI = {
+  getAll: async (organization = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    return apiCall(`/email-automation?${params.toString()}`)
+  },
+  getById: async (id) => {
+    return apiCall(`/email-automation/${id}`)
+  },
+  create: async (automationData) => {
+    return apiCall('/email-automation', {
+      method: 'POST',
+      body: JSON.stringify(automationData),
+    })
+  },
+  update: async (id, automationData) => {
+    return apiCall(`/email-automation/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(automationData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/email-automation/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  run: async (id) => {
+    return apiCall(`/email-automation/${id}/run`, {
+      method: 'POST',
+    })
+  },
+}
+
+// Chatbot API
+export const chatbotAPI = {
+  createSession: async (platform = 'web') => {
+    return apiCall('/chatbot/session', {
+      method: 'POST',
+      body: JSON.stringify({ platform }),
+    })
+  },
+  sendMessage: async (message, sessionId, attachments = []) => {
+    const formData = new FormData()
+    if (message) formData.append('message', message)
+    if (sessionId) formData.append('sessionId', sessionId)
+    attachments.forEach(file => {
+      formData.append('attachments', file)
+    })
+
+    const token = getAuthToken()
+    const response = await fetch(`${API_BASE_URL}/chatbot/message`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+      body: formData,
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'An error occurred' }))
+      throw new Error(error.message || 'Request failed')
+    }
+
+    return response.json()
+  },
+  createTicket: async (sessionId, ticketData) => {
+    return apiCall('/chatbot/create-ticket', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, ...ticketData }),
+    })
+  },
+  getHistory: async (userId = null, limit = 50) => {
+    const params = new URLSearchParams()
+    if (userId) params.append('userId', userId)
+    params.append('limit', limit)
+    return apiCall(`/chatbot/history?${params.toString()}`)
+  },
+  getSession: async (sessionId) => {
+    return apiCall(`/chatbot/session/${sessionId}`)
+  },
+  escalate: async (sessionId, departmentId = null) => {
+    return apiCall('/chatbot/escalate', {
+      method: 'POST',
+      body: JSON.stringify({ sessionId, departmentId }),
+    })
+  },
+}
+
+// FAQ API
+export const faqAPI = {
+  getAll: async (organization = null, category = null, search = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    if (category) params.append('category', category)
+    if (search) params.append('search', search)
+    return apiCall(`/faq?${params.toString()}`)
+  },
+  getById: async (id) => {
+    return apiCall(`/faq/${id}`)
+  },
+  create: async (faqData) => {
+    return apiCall('/faq', {
+      method: 'POST',
+      body: JSON.stringify(faqData),
+    })
+  },
+  update: async (id, faqData) => {
+    return apiCall(`/faq/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(faqData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/faq/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  markHelpful: async (id) => {
+    return apiCall(`/faq/${id}/helpful`, {
+      method: 'POST',
+    })
+  },
+}
+
+// Microsoft Teams API (Admin only)
+export const teamsAPI = {
+  getConfig: async (organization = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    return apiCall(`/teams/config?${params.toString()}`)
+  },
+  saveConfig: async (configData, organization = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    return apiCall(`/teams/config?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify(configData),
+    })
+  },
+  updateConfig: async (id, configData) => {
+    return apiCall(`/teams/config/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(configData),
+    })
+  },
+  deleteConfig: async (id) => {
+    return apiCall(`/teams/config/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  testWebhook: async (webhookUrl, organization = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    return apiCall(`/teams/test?${params.toString()}`, {
+      method: 'POST',
+      body: JSON.stringify({ webhookUrl }),
     })
   },
 }

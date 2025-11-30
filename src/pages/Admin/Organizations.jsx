@@ -21,10 +21,6 @@ export const Organizations = () => {
     domain: '',
     description: '',
     status: 'active',
-    settings: {
-      allowSelfRegistration: false,
-      defaultRole: 'user',
-    },
   })
 
   useEffect(() => {
@@ -45,54 +41,54 @@ export const Organizations = () => {
   }
 
   const handleOpenModal = (org = null) => {
-    if (org) {
-      setEditingOrg(org)
-      setFormData({
-        name: org.name,
-        domain: org.domain || '',
-        description: org.description || '',
-        status: org.status,
-        settings: org.settings || {
-          allowSelfRegistration: false,
-          defaultRole: 'user',
-        },
-      })
-    } else {
-      setEditingOrg(null)
-      setFormData({
-        name: '',
-        domain: '',
-        description: '',
-        status: 'active',
-        settings: {
-          allowSelfRegistration: false,
-          defaultRole: 'user',
-        },
-      })
+    try {
+      if (org) {
+        setEditingOrg(org)
+        setFormData({
+          name: org.name || '',
+          domain: org.domain || '',
+          description: org.description || '',
+          status: org.status || 'active',
+        })
+      } else {
+        setEditingOrg(null)
+        setFormData({
+          name: '',
+          domain: '',
+          description: '',
+          status: 'active',
+        })
+      }
+      setIsModalOpen(true)
+    } catch (error) {
+      console.error('Error opening modal:', error)
+      toast.error('Failed to open edit form')
     }
-    setIsModalOpen(true)
   }
 
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingOrg(null)
-    setFormData({
-      name: '',
-      domain: '',
-      description: '',
-      status: 'active',
-      settings: {
-        allowSelfRegistration: false,
-        defaultRole: 'user',
-      },
-    })
+      setFormData({
+        name: '',
+        domain: '',
+        description: '',
+        status: 'active',
+      })
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
       if (editingOrg) {
-        await organizationsAPI.update(editingOrg._id || editingOrg.id, formData)
+        const orgId = editingOrg._id || editingOrg.id
+        if (!orgId) {
+          toast.error('Invalid organization ID')
+          console.error('Editing org:', editingOrg)
+          return
+        }
+        console.log('Updating organization:', orgId, formData)
+        await organizationsAPI.update(orgId, formData)
         toast.success('Organization updated successfully!')
       } else {
         await organizationsAPI.create(formData)
@@ -101,17 +97,26 @@ export const Organizations = () => {
       handleCloseModal()
       loadOrganizations()
     } catch (error) {
+      console.error('Error saving organization:', error)
       toast.error(error.message || 'Failed to save organization')
     }
   }
 
   const handleDelete = async (orgId) => {
+    if (!orgId) {
+      toast.error('Invalid organization ID')
+      console.error('No organization ID provided')
+      return
+    }
+    
     if (window.confirm('Are you sure you want to delete this organization? This action cannot be undone.')) {
       try {
+        console.log('Deleting organization:', orgId)
         await organizationsAPI.delete(orgId)
         toast.success('Organization deleted successfully!')
         loadOrganizations()
       } catch (error) {
+        console.error('Delete error:', error)
         toast.error(error.message || 'Failed to delete organization')
       }
     }
@@ -148,7 +153,7 @@ export const Organizations = () => {
                 {organizations.map((org) => (
                   <div
                     key={org._id || org.id}
-                    className="card p-6 border-2 border-cyber-neon-cyan/30 hover:border-cyber-neon-cyan/50 transition-all duration-300 cyber-3d"
+                    className="card p-6 border-2 border-cyber-neon-cyan/30 hover:border-cyber-neon-cyan/50 transition-all duration-300 cyber-3d relative"
                   >
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center space-x-3">
@@ -192,16 +197,33 @@ export const Organizations = () => {
                       <p className="text-xs text-cyber-neon-cyan/50 font-mono">
                         {format(new Date(org.createdAt), 'MMM dd, yyyy')}
                       </p>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex items-center space-x-2 relative z-10">
                         <button
-                          onClick={() => handleOpenModal(org)}
-                          className="text-cyber-neon-cyan hover:text-cyber-neon-cyan transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            if (org) {
+                              handleOpenModal(org)
+                            }
+                          }}
+                          className="p-2 text-primary-600 hover:text-primary-700 hover:bg-primary-50 rounded-lg transition-colors cursor-pointer"
+                          title="Edit Organization"
                         >
                           <Edit size={18} />
                         </button>
                         <button
-                          onClick={() => handleDelete(org._id || org.id)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            const orgId = org._id || org.id
+                            if (orgId) {
+                              handleDelete(orgId)
+                            }
+                          }}
+                          className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                          title="Delete Organization"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -218,12 +240,6 @@ export const Organizations = () => {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           title={editingOrg ? 'Edit Organization' : 'Add New Organization'}
-          footer={
-            <>
-              <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
-              <Button onClick={handleSubmit}>Save</Button>
-            </>
-          }
         >
           <form onSubmit={handleSubmit} className="space-y-4">
             <Input
@@ -254,32 +270,23 @@ export const Organizations = () => {
               ]}
               required
             />
-            <div className="space-y-2 pt-4 border-t-2 border-cyber-neon-cyan/20">
-              <p className="text-sm font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Settings</p>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.settings.allowSelfRegistration}
-                  onChange={(e) => setFormData({
-                    ...formData,
-                    settings: { ...formData.settings, allowSelfRegistration: e.target.checked }
-                  })}
-                  className="w-4 h-4 text-cyber-neon-cyan bg-cyber-dark border-cyber-neon-cyan/30 rounded focus:ring-cyber-neon-cyan"
-                />
-                <span className="text-sm text-cyber-neon-cyan/80 font-mono">Allow Self Registration</span>
-              </label>
-              <Select
-                label="Default Role"
-                value={formData.settings.defaultRole}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  settings: { ...formData.settings, defaultRole: e.target.value }
-                })}
-                options={[
-                  { value: 'user', label: 'User' },
-                  { value: 'agent', label: 'Agent' },
-                ]}
-              />
+            <div className="flex space-x-3 pt-4 border-t border-gray-200">
+              <Button
+                type="button"
+                variant="outline"
+                transparent
+                onClick={handleCloseModal}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                transparent
+                className="flex-1"
+              >
+                {editingOrg ? 'Update' : 'Create'} Organization
+              </Button>
             </div>
           </form>
         </Modal>

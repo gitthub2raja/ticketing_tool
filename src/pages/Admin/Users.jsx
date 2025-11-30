@@ -6,14 +6,15 @@ import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
-import { Plus, Edit, Trash2, Search } from 'lucide-react'
-import { usersAPI, organizationsAPI } from '../../services/api'
+import { Plus, Edit, Trash2, Search, Download, Upload } from 'lucide-react'
+import { usersAPI, organizationsAPI, departmentsAPI } from '../../services/api'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 export const Users = () => {
   const [users, setUsers] = useState([])
   const [organizations, setOrganizations] = useState([])
+  const [departments, setDepartments] = useState([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
@@ -25,12 +26,23 @@ export const Users = () => {
     role: '',
     status: 'active',
     organization: '',
+    department: '',
   })
 
   useEffect(() => {
     loadUsers()
     loadOrganizations()
+    loadDepartments()
   }, [])
+
+  useEffect(() => {
+    // Reload departments when organization changes
+    if (formData.organization) {
+      loadDepartments(formData.organization)
+    } else {
+      setDepartments([])
+    }
+  }, [formData.organization])
 
   const loadUsers = async () => {
     try {
@@ -54,6 +66,19 @@ export const Users = () => {
     }
   }
 
+  const loadDepartments = async (organizationId = null) => {
+    try {
+      const data = await departmentsAPI.getAll()
+      // Filter by organization if provided
+      const filtered = organizationId 
+        ? data.filter(dept => (dept.organization?._id || dept.organization) === organizationId)
+        : data
+      setDepartments(filtered)
+    } catch (error) {
+      console.error('Failed to load departments', error)
+    }
+  }
+
   const filteredUsers = users.filter(user =>
     user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase())
@@ -69,10 +94,15 @@ export const Users = () => {
         role: user.role,
         status: user.status,
         organization: user.organization?._id || user.organization || '',
+        department: user.department?._id || user.department || '',
       })
+      // Load departments for this user's organization
+      if (user.organization?._id || user.organization) {
+        loadDepartments(user.organization?._id || user.organization)
+      }
     } else {
       setEditingUser(null)
-      setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '' })
+      setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
     }
     setIsModalOpen(true)
   }
@@ -80,7 +110,8 @@ export const Users = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingUser(null)
-    setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '' })
+    setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
+    setDepartments([])
   }
 
   const handleSubmit = async (e) => {
@@ -120,11 +151,134 @@ export const Users = () => {
     if (window.confirm('Are you sure you want to delete this user?')) {
       try {
         await usersAPI.delete(userId)
-      toast.success('User deleted successfully!')
+        toast.success('User deleted successfully!')
         loadUsers()
       } catch (error) {
         toast.error(error.message || 'Failed to delete user')
       }
+    }
+  }
+
+  const handleExportUsers = () => {
+    const headers = ['Name', 'Email', 'Password', 'Role', 'Status', 'Organization', 'Department']
+    const rows = users.map(user => [
+      user.name,
+      user.email,
+      '', // Password not exported for security
+      user.role,
+      user.status,
+      user.organization?.name || 'N/A',
+      user.department?.name || 'N/A',
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `users-export-${format(new Date(), 'yyyy-MM-dd')}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    toast.success('Users exported successfully!')
+  }
+
+  const handleImportUsers = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      const lines = text.split('\n').filter(line => line.trim())
+      if (lines.length < 2) {
+        toast.error('CSV file must contain at least a header row and one data row')
+        return
+      }
+
+      const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim())
+      const nameIndex = headers.indexOf('Name')
+      const emailIndex = headers.indexOf('Email')
+      const passwordIndex = headers.indexOf('Password')
+      const roleIndex = headers.indexOf('Role')
+      const statusIndex = headers.indexOf('Status')
+      const orgIndex = headers.indexOf('Organization')
+      const deptIndex = headers.indexOf('Department')
+
+      if (nameIndex === -1 || emailIndex === -1) {
+        toast.error('CSV must contain Name and Email columns')
+        return
+      }
+
+      const usersToImport = []
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim())
+        const name = values[nameIndex]
+        const email = values[emailIndex]
+        
+        if (!name || !email) continue
+
+        // Find organization by name
+        let organizationId = ''
+        if (orgIndex !== -1 && values[orgIndex]) {
+          const org = organizations.find(o => o.name === values[orgIndex])
+          if (org) {
+            organizationId = org._id || org.id
+          } else {
+            toast.error(`Organization "${values[orgIndex]}" not found for user ${email}`)
+            continue
+          }
+        }
+
+        // Find department by name
+        let departmentId = ''
+        if (deptIndex !== -1 && values[deptIndex] && organizationId) {
+          const dept = departments.find(d => 
+            d.name === values[deptIndex] && 
+            (d.organization?._id || d.organization) === organizationId
+          )
+          if (dept) departmentId = dept._id || dept.id
+        }
+
+        usersToImport.push({
+          name,
+          email,
+          password: passwordIndex !== -1 && values[passwordIndex] ? values[passwordIndex] : 'TempPassword123!',
+          role: roleIndex !== -1 && values[roleIndex] ? values[roleIndex] : 'user',
+          status: statusIndex !== -1 && values[statusIndex] ? values[statusIndex] : 'active',
+          organization: organizationId || organizations[0]?._id || organizations[0]?.id,
+          department: departmentId || '',
+        })
+      }
+
+      if (usersToImport.length === 0) {
+        toast.error('No valid users found in CSV')
+        return
+      }
+
+      // Import users
+      let successCount = 0
+      let errorCount = 0
+      for (const userData of usersToImport) {
+        try {
+          await usersAPI.create(userData)
+          successCount++
+        } catch (error) {
+          errorCount++
+          console.error(`Failed to import user ${userData.email}:`, error)
+        }
+      }
+
+      toast.success(`Imported ${successCount} users${errorCount > 0 ? `, ${errorCount} failed` : ''}`)
+      loadUsers()
+      e.target.value = '' // Reset file input
+    } catch (error) {
+      toast.error('Failed to import users: ' + error.message)
+      console.error(error)
     }
   }
 
@@ -133,19 +287,41 @@ export const Users = () => {
       <div className="space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-cyber font-bold neon-text uppercase tracking-wider mb-2">User Management</h1>
-            <p className="text-cyber-neon-cyan/70 font-mono uppercase tracking-widest text-sm">Manage System Users and Their Permissions</p>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-primary-700 to-gray-900 bg-clip-text text-transparent mb-1">
+              User Management
+            </h1>
+            <p className="text-sm text-gray-600">Manage system users and their permissions</p>
           </div>
-          <Button onClick={() => handleOpenModal()} className="btn-primary">
-            <Plus size={20} className="mr-2" />
-            Add User
-          </Button>
+          <div className="flex gap-3">
+            <Button 
+              transparent
+              variant="outline"
+              onClick={handleExportUsers}
+            >
+              <Download size={20} className="mr-2" />
+              Export CSV
+            </Button>
+            <label className="btn btn-outline cursor-pointer">
+              <Upload size={20} className="mr-2" />
+              Import CSV
+              <input
+                type="file"
+                accept=".csv"
+                onChange={handleImportUsers}
+                className="hidden"
+              />
+            </label>
+            <Button onClick={() => handleOpenModal()} transparent>
+              <Plus size={20} className="mr-2" />
+              Add User
+            </Button>
+          </div>
         </div>
 
         <Card className="p-6">
           <div className="mb-4">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-cyber-neon-cyan/50" size={20} />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <Input
                 placeholder="Search users..."
                 value={searchTerm}
@@ -156,41 +332,45 @@ export const Users = () => {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y-2 divide-cyber-neon-cyan/20">
-              <thead className="bg-cyber-darker/50">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50/80 backdrop-blur-sm">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Organization</th>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Created</th>
-                  <th className="px-6 py-3 text-right text-xs font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Organization</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y-2 divide-cyber-neon-cyan/10">
+              <tbody className="bg-white divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-center text-cyber-neon-cyan/70 font-mono">Loading...</td>
+                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">Loading...</td>
                   </tr>
                 ) : filteredUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-4 text-center text-cyber-neon-cyan/70 font-mono">No users found</td>
+                    <td colSpan={8} className="px-6 py-4 text-center text-gray-500">No users found</td>
                   </tr>
                 ) : (
                   filteredUsers.map((user) => (
-                    <tr key={user._id || user.id} className="hover:bg-cyber-neon-cyan/5 transition-all duration-300 border-l-2 border-transparent hover:border-cyber-neon-cyan/50">
+                    <tr key={user._id || user.id} className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-300 border-l-4 border-transparent hover:border-primary-500">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-cyber font-bold uppercase tracking-wider bg-cyber-neon-cyan/20 text-cyber-neon-cyan border-2 border-cyber-neon-cyan/50 glow-cyber">
+                      <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-primary-100/80 backdrop-blur-sm text-primary-700 border border-primary-200">
                         {user.name}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-cyber-neon-cyan/80 font-mono">{user.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-cyber-neon-cyan/70 font-mono">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{user.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {user.organization?.name || 'N/A'}
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {user.department?.name || 'N/A'}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'agent' ? 'info' : 'info'}>
+                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'agent' ? 'info' : user.role === 'department-head' ? 'warning' : 'info'}>
                         {user.role}
                       </Badge>
                     </td>
@@ -199,20 +379,20 @@ export const Users = () => {
                         {user.status}
                       </Badge>
                     </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-cyber-neon-cyan/70 font-mono">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {format(new Date(user.createdAt), 'MMM dd, yyyy')}
                       </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => handleOpenModal(user)}
-                          className="text-cyber-neon-cyan hover:text-cyber-neon-cyan/80 transition-colors"
+                          className="text-primary-600 hover:text-primary-700 transition-colors p-2 rounded-lg hover:bg-primary-50/50 backdrop-blur-sm"
                         >
                           <Edit size={18} />
                         </button>
                         <button
                             onClick={() => handleDelete(user._id || user.id)}
-                          className="text-red-400 hover:text-red-300 transition-colors"
+                          className="text-red-600 hover:text-red-700 transition-colors p-2 rounded-lg hover:bg-red-50/50 backdrop-blur-sm"
                         >
                           <Trash2 size={18} />
                         </button>
@@ -232,8 +412,8 @@ export const Users = () => {
           title={editingUser ? 'Edit User' : 'Add New User'}
           footer={
             <>
-              <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
-              <Button onClick={handleSubmit}>Save</Button>
+              <Button variant="outline" transparent onClick={handleCloseModal}>Cancel</Button>
+              <Button transparent onClick={handleSubmit}>Save</Button>
             </>
           }
         >
@@ -262,12 +442,25 @@ export const Users = () => {
             <Select
               label="Organization *"
               value={formData.organization}
-              onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, organization: e.target.value, department: '' })}
               options={organizations.map(org => ({
                 value: org._id || org.id,
                 label: org.name,
               }))}
               required
+            />
+            <Select
+              label="Department (Optional)"
+              value={formData.department}
+              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+              options={[
+                { value: '', label: 'No Department' },
+                ...departments.map(dept => ({
+                  value: dept._id || dept.id,
+                  label: dept.name,
+                })),
+              ]}
+              disabled={!formData.organization}
             />
             <Select
               label="Role"
@@ -277,6 +470,8 @@ export const Users = () => {
                 { value: 'user', label: 'User' },
                 { value: 'agent', label: 'Agent' },
                 { value: 'admin', label: 'Admin' },
+                { value: 'department-head', label: 'Department Head' },
+                { value: 'technician', label: 'Technician' },
               ]}
               required
             />

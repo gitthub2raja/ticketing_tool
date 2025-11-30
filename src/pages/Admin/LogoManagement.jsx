@@ -3,7 +3,7 @@ import { Layout } from '../../components/layout/Layout'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { Upload, Image as ImageIcon, X, Save } from 'lucide-react'
+import { Upload, Image as ImageIcon, X, Save, Eye, EyeOff } from 'lucide-react'
 import { adminAPI } from '../../services/api'
 import { useLogo } from '../../contexts/LogoContext'
 import toast from 'react-hot-toast'
@@ -12,8 +12,9 @@ export const LogoManagement = () => {
   const [logoFile, setLogoFile] = useState(null)
   const [logoPreview, setLogoPreview] = useState('/logo.svg')
   const [logoUrl, setLogoUrl] = useState('')
+  const [showOnLogin, setShowOnLogin] = useState(true)
   const [loading, setLoading] = useState(false)
-  const { updateLogo, reloadLogo } = useLogo()
+  const { updateLogo, updateShowOnLogin, reloadLogo } = useLogo()
 
   useEffect(() => {
     loadLogo()
@@ -24,6 +25,9 @@ export const LogoManagement = () => {
       const response = await adminAPI.getLogo()
       if (response.logo) {
         setLogoPreview(response.logo)
+      }
+      if (response.showOnLogin !== undefined) {
+        setShowOnLogin(response.showOnLogin)
       }
     } catch (error) {
       console.error('Failed to load logo:', error)
@@ -66,12 +70,13 @@ export const LogoManagement = () => {
   const handleSave = async () => {
     setLoading(true)
     try {
-      await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo')
+      await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo', showOnLogin)
       // Update logo in context to reflect changes immediately
       updateLogo(logoPreview)
+      updateShowOnLogin(showOnLogin)
       // Reload logo from server to ensure consistency
       await reloadLogo()
-      toast.success('Logo saved successfully!')
+      toast.success('Logo settings saved successfully!')
       setLogoFile(null)
     } catch (error) {
       toast.error(error.message || 'Failed to save logo')
@@ -80,13 +85,40 @@ export const LogoManagement = () => {
     }
   }
 
+  const handleRemoveLogo = async () => {
+    if (window.confirm('Are you sure you want to remove the logo from the login page? This will hide it but keep the logo file.')) {
+      setShowOnLogin(false)
+      try {
+        await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo', false)
+        updateShowOnLogin(false)
+        await reloadLogo()
+        toast.success('Logo removed from login page')
+      } catch (error) {
+        toast.error('Failed to update logo settings')
+        setShowOnLogin(true) // Revert on error
+      }
+    }
+  }
+
+  const handleShowLogo = async () => {
+    setShowOnLogin(true)
+    try {
+      await adminAPI.updateLogo(logoPreview, logoFile?.name || 'logo', true)
+      updateShowOnLogin(true)
+      await reloadLogo()
+      toast.success('Logo will now be shown on login page')
+    } catch (error) {
+      toast.error('Failed to update logo settings')
+      setShowOnLogin(false) // Revert on error
+    }
+  }
+
   const handleReset = async () => {
     try {
-    setLogoPreview('/logo.svg')
-    setLogoFile(null)
-    setLogoUrl('')
-      // Optionally delete from backend
-    toast.success('Logo reset to default')
+      setLogoPreview('/logo.svg')
+      setLogoFile(null)
+      setLogoUrl('')
+      toast.success('Logo reset to default')
     } catch (error) {
       toast.error('Failed to reset logo')
     }
@@ -96,12 +128,14 @@ export const LogoManagement = () => {
     <Layout>
       <div className="max-w-4xl mx-auto space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Logo Management</h1>
-          <p className="text-gray-600 mt-1">Upload and manage your organization's logo</p>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-gray-900 via-primary-700 to-gray-900 bg-clip-text text-transparent mb-1">
+            Logo Management
+          </h1>
+          <p className="text-sm text-gray-600">Upload and manage your organization's logo</p>
         </div>
 
         <Card title="Current Logo">
-          <div className="flex items-center justify-center p-8 bg-gray-50 rounded-lg mb-6">
+          <div className="flex items-center justify-center p-8 bg-gradient-to-br from-gray-50 to-gray-100/50 rounded-xl mb-6 border border-gray-200">
             <img 
               src={logoPreview} 
               alt="Logo Preview" 
@@ -112,13 +146,54 @@ export const LogoManagement = () => {
               }}
             />
           </div>
+          
+          {/* Login Page Visibility Toggle */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary-50/50 to-primary-100/30 rounded-xl border border-primary-200/50 backdrop-blur-sm">
+            <div className="flex items-center space-x-3">
+              {showOnLogin ? (
+                <Eye className="text-primary-600" size={20} />
+              ) : (
+                <EyeOff className="text-gray-400" size={20} />
+              )}
+              <div>
+                <p className="text-sm font-semibold text-gray-900">
+                  Show Logo on Login Page
+                </p>
+                <p className="text-xs text-gray-600">
+                  {showOnLogin ? 'Logo is currently visible on the login page' : 'Logo is hidden on the login page'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {showOnLogin ? (
+                <Button
+                  variant="outline"
+                  transparent
+                  onClick={handleRemoveLogo}
+                  className="flex items-center gap-2"
+                >
+                  <EyeOff size={16} />
+                  Remove from Login
+                </Button>
+              ) : (
+                <Button
+                  transparent
+                  onClick={handleShowLogo}
+                  className="flex items-center gap-2"
+                >
+                  <Eye size={16} />
+                  Show on Login
+                </Button>
+              )}
+            </div>
+          </div>
         </Card>
 
         <Card title="Upload Logo">
           <div className="space-y-6">
             {/* File Upload */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Upload Logo File
               </label>
               <div className="flex items-center space-x-4">
@@ -129,7 +204,7 @@ export const LogoManagement = () => {
                     onChange={handleFileChange}
                     className="hidden"
                   />
-                  <div className="flex items-center justify-center px-6 py-4 border-2 border-dashed border-gray-300 rounded-lg hover:border-primary-500 transition-colors">
+                  <div className="flex items-center justify-center px-6 py-4 border-2 border-dashed border-gray-300 rounded-xl hover:border-primary-500 transition-all duration-300 bg-white/50 backdrop-blur-sm hover:bg-white/80">
                     <div className="text-center">
                       <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
                       <span className="text-sm text-gray-600">
@@ -144,7 +219,7 @@ export const LogoManagement = () => {
 
             {/* URL Input */}
             <div className="border-t border-gray-200 pt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Or Enter Logo URL
               </label>
               <div className="flex space-x-2">
@@ -158,6 +233,7 @@ export const LogoManagement = () => {
                 <Button
                   type="button"
                   variant="outline"
+                  transparent
                   onClick={handleLoadFromUrl}
                 >
                   <ImageIcon size={20} className="mr-2" />
@@ -170,6 +246,7 @@ export const LogoManagement = () => {
             <div className="flex space-x-3 pt-4 border-t border-gray-200">
               <Button
                 variant="outline"
+                transparent
                 onClick={handleReset}
                 className="flex-1"
               >
@@ -177,6 +254,7 @@ export const LogoManagement = () => {
                 Reset to Default
               </Button>
               <Button
+                transparent
                 onClick={handleSave}
                 disabled={loading}
                 className="flex-1"
@@ -186,9 +264,9 @@ export const LogoManagement = () => {
               </Button>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="bg-blue-50/80 backdrop-blur-sm border border-blue-200 rounded-xl p-4">
               <p className="text-sm text-blue-800">
-                <strong>Note:</strong> The logo will be displayed on the login page and in the sidebar. 
+                <strong>Note:</strong> The logo will be displayed in the sidebar and optionally on the login page. 
                 Recommended size: 200x60px or similar aspect ratio. Supported formats: PNG, JPG, SVG.
               </p>
             </div>
@@ -198,4 +276,3 @@ export const LogoManagement = () => {
     </Layout>
   )
 }
-

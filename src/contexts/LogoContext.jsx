@@ -13,6 +13,7 @@ export const useLogo = () => {
 
 export const LogoProvider = ({ children }) => {
   const [logo, setLogo] = useState('/logo.svg') // Default fallback
+  const [showOnLogin, setShowOnLogin] = useState(true) // Default to showing on login
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -24,6 +25,9 @@ export const LogoProvider = ({ children }) => {
       const response = await adminAPI.getLogo()
       if (response.logo) {
         setLogo(response.logo)
+      }
+      if (response.showOnLogin !== undefined) {
+        setShowOnLogin(response.showOnLogin)
       }
     } catch (error) {
       console.error('Failed to load logo:', error)
@@ -37,8 +41,19 @@ export const LogoProvider = ({ children }) => {
     setLogo(newLogo)
   }
 
+  const updateShowOnLogin = (value) => {
+    setShowOnLogin(value)
+  }
+
   return (
-    <LogoContext.Provider value={{ logo, loading, updateLogo, reloadLogo: loadLogo }}>
+    <LogoContext.Provider value={{ 
+      logo, 
+      showOnLogin, 
+      loading, 
+      updateLogo, 
+      updateShowOnLogin,
+      reloadLogo: loadLogo 
+    }}>
       {children}
     </LogoContext.Provider>
   )

@@ -31,6 +31,19 @@ export const TicketDetail = () => {
   const textareaRef = useRef(null)
   const mentionListRef = useRef(null)
 
+  const formatStatus = (status) => {
+    const statusMap = {
+      'open': 'Open',
+      'approval-pending': 'Approval Pending',
+      'approved': 'Approved',
+      'rejected': 'Rejected',
+      'in-progress': 'In Progress',
+      'resolved': 'Resolved',
+      'closed': 'Closed'
+    }
+    return statusMap[status] || status
+  }
+
   useEffect(() => {
     loadTicket()
     loadMentionUsers()
@@ -271,7 +284,36 @@ export const TicketDetail = () => {
   const getStatusVariant = (status) => {
     if (status === 'resolved') return 'success'
     if (status === 'in-progress') return 'info'
+    if (status === 'approved') return 'success'
+    if (status === 'rejected') return 'danger'
+    if (status === 'approval-pending') return 'warning'
     return 'warning'
+  }
+
+  const handleApprove = async () => {
+    try {
+      const updatedTicket = await ticketsAPI.approveTicket(id)
+      setTicket(updatedTicket)
+      toast.success('Ticket approved successfully!')
+    } catch (error) {
+      toast.error(error.message || 'Failed to approve ticket')
+    }
+  }
+
+  const handleReject = async () => {
+    const reason = window.prompt('Please provide a reason for rejection:')
+    if (reason === null || !reason.trim()) {
+      if (reason !== null) toast.error('Rejection reason is required')
+      return
+    }
+
+    try {
+      const updatedTicket = await ticketsAPI.rejectTicket(id, reason)
+      setTicket(updatedTicket)
+      toast.success('Ticket rejected')
+    } catch (error) {
+      toast.error(error.message || 'Failed to reject ticket')
+    }
   }
 
   return (
@@ -405,21 +447,55 @@ export const TicketDetail = () => {
                 <div>
                   <label className="text-sm font-medium text-gray-500 block mb-2">Status</label>
                   {/* Regular users can only view status, not edit */}
-                  {user?.role === 'admin' || user?.role === 'agent' ? (
+                  {user?.role === 'admin' || user?.role === 'agent' || user?.role === 'technician' ? (
                     <select
                       value={ticket.status}
                       onChange={handleStatusChange}
                       className="input w-full"
                     >
                       <option value="open">Open</option>
+                      <option value="approval-pending">Approval Pending</option>
+                      <option value="approved">Approved</option>
+                      <option value="rejected">Rejected</option>
                       <option value="in-progress">In Progress</option>
                       <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
                     </select>
                   ) : (
                     <Badge variant={getStatusVariant(ticket.status)}>
-                      {ticket.status}
+                      {formatStatus(ticket.status)}
                     </Badge>
+                  )}
+                  {/* Approval Actions for Department Head */}
+                  {user?.role === 'department-head' && ticket.status === 'approval-pending' && (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        transparent
+                        onClick={handleApprove}
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white"
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        transparent
+                        onClick={handleReject}
+                        className="flex-1 bg-red-500 hover:bg-red-600 text-white"
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  )}
+                  {/* Approved By Info */}
+                  {ticket.approvedBy && (
+                    <div className="mt-2 text-xs text-gray-500">
+                      {ticket.status === 'approved' ? 'Approved' : ticket.status === 'rejected' ? 'Rejected' : ''} by {ticket.approvedBy?.name || 'Unknown'}
+                      {ticket.approvedAt && ` on ${format(new Date(ticket.approvedAt), 'MMM dd, yyyy HH:mm')}`}
+                    </div>
+                  )}
+                  {ticket.rejectionReason && (
+                    <div className="mt-2 text-xs text-red-600">
+                      Reason: {ticket.rejectionReason}
+                    </div>
                   )}
                 </div>
 

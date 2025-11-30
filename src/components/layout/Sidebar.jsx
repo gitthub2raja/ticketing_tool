@@ -2,7 +2,6 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   Ticket, 
-  PlusCircle, 
   Settings, 
   Users, 
   Shield,
@@ -12,52 +11,79 @@ import {
   Image as ImageIcon,
   Building2,
   Tag,
-  X
+  X,
+  Clock,
+  FileText,
+  Briefcase,
+  Upload,
+  BarChart3,
+  Key,
+  MessageSquare,
+  Send,
+  HelpCircle
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLogo } from '../../contexts/LogoContext'
 
-const menuItems = [
-  { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { path: '/tickets', icon: Ticket, label: 'Tickets' },
-  { path: '/tickets/new', icon: PlusCircle, label: 'New Ticket' },
-  { path: '/settings', icon: Settings, label: 'Settings' },
-]
+const getMenuItems = (userRole) => {
+  const items = [
+    { path: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
+    { path: '/tickets', icon: Ticket, label: 'Tickets' },
+  ]
+  
+  // Only show Reports for admins and agents
+  if (userRole === 'admin' || userRole === 'agent') {
+    items.push({ path: '/reports', icon: FileText, label: 'Reports' })
+  }
+  
+  items.push({ path: '/settings', icon: Settings, label: 'Settings' })
+  
+  return items
+}
 
 const adminMenuItems = [
   { path: '/admin/organizations', icon: Building2, label: 'Organizations' },
   { path: '/admin/users', icon: Users, label: 'Users' },
   { path: '/admin/categories', icon: Tag, label: 'Categories' },
+  { path: '/admin/departments', icon: Briefcase, label: 'Departments' },
   { path: '/admin/roles', icon: Shield, label: 'Roles' },
+  { path: '/admin/sla', icon: Clock, label: 'SLA Policies' },
+  { path: '/admin/tickets/import', icon: Upload, label: 'Import Tickets' },
+  { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
+  { path: '/admin/api-keys', icon: Key, label: 'API Keys' },
   { path: '/admin/email', icon: Mail, label: 'Email Settings' },
+  { path: '/admin/email-automation', icon: Send, label: 'Email Automation' },
+  { path: '/admin/faq', icon: HelpCircle, label: 'FAQ Management' },
+  { path: '/admin/chat-history', icon: MessageSquare, label: 'Chat History' },
+  { path: '/admin/teams-integration', icon: MessageSquare, label: 'Microsoft Teams' },
   { path: '/admin/sso', icon: Shield, label: 'SSO Configuration' },
   { path: '/admin/logo', icon: ImageIcon, label: 'Logo Management' },
 ]
 
-const NavItem = ({ item, onClick, activeColor = 'cyan' }) => {
+const NavItem = ({ item, onClick }) => {
   const location = useLocation()
   const isActive = location.pathname === item.path
   const Icon = item.icon
-  
-  // Always use cyan color to match Dashboard
-  const colorClasses = {
-    active: 'bg-cyber-neon-cyan/20 text-cyber-neon-cyan font-bold glow-cyber border-2 border-cyber-neon-cyan/50',
-    inactive: 'text-cyber-neon-cyan/80 hover:bg-cyber-neon-cyan/10 hover:text-cyber-neon-cyan hover:border-2 hover:border-cyber-neon-cyan/30',
-    dot: 'bg-cyber-neon-cyan'
-  }
 
   return (
     <NavLink
       to={item.path}
       onClick={onClick}
-      className={`flex items-center px-4 py-3 rounded-lg transition-all duration-300 relative group ${
-        isActive ? colorClasses.active : colorClasses.inactive
+      className={`flex items-center px-4 py-3 rounded-xl transition-all duration-300 relative group ${
+        isActive 
+          ? 'bg-gradient-to-r from-primary-500/20 via-primary-500/15 to-primary-500/10 text-primary-700 font-semibold backdrop-blur-md border border-primary-500/30 shadow-lg shadow-primary-500/20' 
+          : 'text-gray-700 hover:bg-white/40 hover:backdrop-blur-md hover:text-gray-900 hover:border hover:border-white/30 hover:shadow-md'
       }`}
+      style={{
+        backgroundColor: isActive 
+          ? 'rgba(14, 165, 233, 0.15)' 
+          : 'transparent',
+      }}
     >
-      <Icon size={20} className="mr-3" />
-      <span className="font-cyber uppercase tracking-wider text-sm">{item.label}</span>
+      <Icon size={20} className={`mr-3 ${isActive ? 'text-primary-600' : 'text-gray-500 group-hover:text-primary-600'} transition-colors`} />
+      <span className="text-sm">{item.label}</span>
       {isActive && (
-        <div className={`absolute right-2 w-2 h-2 ${colorClasses.dot} rounded-full animate-glow-pulse`}></div>
+        <div className="absolute right-2 w-2 h-2 bg-primary-600 rounded-full animate-glow-pulse shadow-lg shadow-primary-500/50" />
       )}
     </NavLink>
   )
@@ -67,100 +93,125 @@ export const Sidebar = ({ isOpen, onClose }) => {
   const { user, logout } = useAuth()
   const { logo } = useLogo()
   const isAdmin = user?.role === 'admin'
+  const isDepartmentHead = user?.role === 'department-head'
 
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-cyber-darker/90 backdrop-blur-sm z-20 lg:hidden"
+          className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-20 lg:hidden transition-opacity"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
+      {/* Sidebar with transparent glass effect */}
       <aside
-        className={`fixed top-0 left-0 z-30 h-full w-64 bg-gradient-to-b from-cyber-darker to-cyber-dark border-r-2 border-cyber-neon-cyan/30 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
+        className={`fixed top-0 left-0 z-30 h-full w-64 transform transition-transform duration-300 ease-in-out lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
-        } shadow-2xl shadow-cyber-glow-cyan/20`}
+        }`}
+        style={{
+          background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.7) 0%, rgba(255, 255, 255, 0.5) 100%)',
+          backdropFilter: 'blur(20px) saturate(180%)',
+          WebkitBackdropFilter: 'blur(20px) saturate(180%)',
+          borderRight: '1px solid rgba(255, 255, 255, 0.3)',
+          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.1)',
+        }}
       >
-        <div className="flex flex-col h-full relative">
-          {/* Animated border glow */}
-          <div className="absolute inset-0 border-2 border-cyber-neon-cyan/20 rounded-r-xl pointer-events-none">
-            <div className="absolute inset-0 bg-gradient-to-r from-cyber-neon-cyan/10 via-transparent to-transparent animate-shimmer"></div>
-          </div>
-
-          {/* Logo */}
-          <div className="flex items-center justify-between h-20 px-6 border-b-2 border-cyber-neon-cyan/20 relative z-10">
+        <div className="flex flex-col h-full">
+          {/* Logo Header with transparent effect */}
+          <div 
+            className="flex items-center justify-between h-16 px-6 border-b"
+            style={{
+              borderColor: 'rgba(0, 0, 0, 0.08)',
+              background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.8) 0%, rgba(255, 255, 255, 0.6) 100%)',
+            }}
+          >
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyber-neon-cyan to-cyber-neon-blue rounded-lg flex items-center justify-center glow-cyber">
+              <div 
+                className="w-10 h-10 rounded-xl flex items-center justify-center shadow-lg"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(14, 165, 233, 0.8) 0%, rgba(2, 132, 199, 0.9) 100%)',
+                  boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)',
+                }}
+              >
                 <img 
                   src={logo} 
-                  alt="Rezilyens" 
+                  alt="Logo" 
                   className="h-8 w-auto"
                   onError={(e) => {
                     e.target.src = '/logo.svg'
                   }}
                 />
               </div>
-              <span className="text-cyber-neon-cyan font-cyber font-bold text-lg neon-text">
-                REZILYENS
+              <span className="text-lg font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                Ticketing Tool
               </span>
             </div>
             <button
               onClick={onClose}
-              className="lg:hidden text-cyber-neon-cyan/70 hover:text-cyber-neon-cyan transition-colors"
+              className="lg:hidden text-gray-500 hover:text-gray-700 transition-colors p-1 rounded-lg hover:bg-white/40 backdrop-blur-sm"
             >
               <X size={24} />
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className="flex-1 px-4 py-6 space-y-2 overflow-y-auto relative z-10">
-            {menuItems.map((item) => (
-              <NavItem
-                key={item.path}
-                item={item}
-                onClick={() => window.innerWidth < 1024 && onClose()}
-                activeColor="cyan"
-              />
-            ))}
+                {/* Navigation */}
+                <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+                  {getMenuItems(user?.role).map((item) => (
+                    <NavItem
+                      key={item.path}
+                      item={item}
+                      onClick={() => window.innerWidth < 1024 && onClose()}
+                    />
+                  ))}
 
-            {isAdmin && (
+            {(isAdmin || isDepartmentHead) && (
               <>
-                <div className="pt-6 mt-6 border-t-2 border-cyber-neon-cyan/20">
-                  <p className="px-4 text-xs font-cyber font-bold text-cyber-neon-cyan/80 uppercase tracking-widest mb-3 neon-text">
-                    Administration
+                <div className="pt-4 mt-4 border-t" style={{ borderColor: 'rgba(0, 0, 0, 0.08)' }}>
+                  <p className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                    {isAdmin ? 'Administration' : 'Department Management'}
                   </p>
                 </div>
-                {adminMenuItems.map((item) => (
+                {isAdmin && adminMenuItems.map((item) => (
                   <NavItem
                     key={item.path}
                     item={item}
                     onClick={() => window.innerWidth < 1024 && onClose()}
-                    activeColor="cyan"
                   />
                 ))}
+                {isDepartmentHead && (
+                  <NavItem
+                    item={{ path: '/department-head/dashboard', icon: LayoutDashboard, label: 'Department Dashboard' }}
+                    onClick={() => window.innerWidth < 1024 && onClose()}
+                  />
+                )}
               </>
             )}
           </nav>
 
-          {/* User section */}
-          <div className="border-t-2 border-cyber-neon-cyan/20 p-4 relative z-10">
+          {/* User section with transparent effect */}
+          <div 
+            className="p-4 border-t"
+            style={{
+              borderColor: 'rgba(0, 0, 0, 0.08)',
+              background: 'linear-gradient(to top, rgba(255, 255, 255, 0.6) 0%, transparent 100%)',
+            }}
+          >
             <NavLink
               to="/profile"
               onClick={() => window.innerWidth < 1024 && onClose()}
-              className="flex items-center px-4 py-3 text-cyber-neon-cyan/80 rounded-lg hover:bg-cyber-neon-cyan/10 hover:text-cyber-neon-cyan transition-all duration-300 mb-2 group"
+              className="flex items-center px-4 py-3 text-gray-700 rounded-xl transition-all duration-300 mb-2 backdrop-blur-md hover:bg-white/50 hover:text-gray-900 border border-transparent hover:border-white/40 shadow-sm hover:shadow-md"
             >
-              <User size={20} className="mr-3" />
-              <span className="font-cyber uppercase tracking-wider text-sm">Profile</span>
+              <User size={20} className="mr-3 text-gray-500" />
+              <span className="text-sm font-medium">Profile</span>
             </NavLink>
             <button
               onClick={logout}
-              className="w-full flex items-center px-4 py-3 text-red-400 rounded-lg hover:bg-red-500/10 hover:text-red-300 transition-all duration-300 group border-2 border-transparent hover:border-red-500/30"
+              className="w-full flex items-center px-4 py-3 text-red-600 rounded-xl transition-all duration-300 backdrop-blur-md hover:bg-red-500/20 hover:text-red-700 border border-transparent hover:border-red-500/30 shadow-sm hover:shadow-md"
             >
               <LogOut size={20} className="mr-3" />
-              <span className="font-cyber uppercase tracking-wider text-sm">Logout</span>
+              <span className="text-sm font-medium">Logout</span>
             </button>
           </div>
         </div>

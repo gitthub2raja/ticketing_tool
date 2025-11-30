@@ -6,7 +6,6 @@ services:
     image: mongo:7.0
     container_name: ticketing_mongodb
     restart: unless-stopped
-    user: "999:999"
     ports:
       - "27018:27017"
     environment:
