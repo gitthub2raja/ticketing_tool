@@ -118,15 +118,47 @@ export const TicketImport = () => {
     }
   }
 
+  // Parse CSV with proper handling of quoted fields
+  const parseCSVLine = (line) => {
+    const result = []
+    let current = ''
+    let inQuotes = false
+
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i]
+      const nextChar = line[i + 1]
+
+      if (char === '"') {
+        if (inQuotes && nextChar === '"') {
+          // Escaped quote
+          current += '"'
+          i++ // Skip next quote
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator
+        result.push(current.trim())
+        current = ''
+      } else {
+        current += char
+      }
+    }
+    // Add last field
+    result.push(current.trim())
+    return result
+  }
+
   const parseCSV = (csvText) => {
     const lines = csvText.split('\n').filter(line => line.trim())
     if (lines.length < 2) return []
 
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+    const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
     const tickets = []
 
     for (let i = 1; i < lines.length; i++) {
-      const values = lines[i].split(',').map(v => v.trim())
+      const values = parseCSVLine(lines[i]).map(v => v.replace(/^"|"$/g, '').trim())
       if (values.length !== headers.length) continue
 
       const ticket = {}
@@ -150,7 +182,7 @@ export const TicketImport = () => {
     return tickets
   }
 
-  const downloadTemplate = () => {
+  const downloadJSONTemplate = () => {
     const template = [
       {
         ticketId: 1001,
@@ -160,6 +192,17 @@ export const TicketImport = () => {
         priority: 'medium',
         status: 'open',
         createdAt: new Date().toISOString(),
+        dueDate: null,
+      },
+      {
+        ticketId: 1002,
+        title: 'Another Sample Ticket',
+        description: 'Another sample ticket description',
+        category: 'General',
+        priority: 'high',
+        status: 'in-progress',
+        createdAt: new Date().toISOString(),
+        dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days from now
       }
     ]
 
@@ -170,6 +213,69 @@ export const TicketImport = () => {
     a.download = 'ticket-import-template.json'
     a.click()
     URL.revokeObjectURL(url)
+    toast.success('JSON template downloaded')
+  }
+
+  const downloadCSVTemplate = () => {
+    // CSV headers matching the parseCSV function expectations
+    const headers = [
+      'ticketId',
+      'title',
+      'description',
+      'category',
+      'priority',
+      'status',
+      'createdAt',
+      'dueDate'
+    ]
+    
+    // Sample data rows
+    const rows = [
+      [
+        '1001',
+        'Sample Ticket Title',
+        'Sample ticket description',
+        'IT Support',
+        'medium',
+        'open',
+        new Date().toISOString(),
+        ''
+      ],
+      [
+        '1002',
+        'Another Sample Ticket',
+        'Another sample ticket description',
+        'General',
+        'high',
+        'in-progress',
+        new Date().toISOString(),
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+      ]
+    ]
+
+    // Create CSV content
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => 
+        row.map(cell => {
+          // Escape commas and quotes in CSV cells
+          const cellStr = String(cell || '')
+          if (cellStr.includes(',') || cellStr.includes('"') || cellStr.includes('\n')) {
+            return `"${cellStr.replace(/"/g, '""')}"`
+          }
+          return cellStr
+        }).join(',')
+      )
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'ticket-import-template.csv'
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success('CSV template downloaded')
   }
 
   return (
@@ -182,15 +288,26 @@ export const TicketImport = () => {
             </h1>
             <p className="text-sm text-gray-600">Import tickets from external ticketing systems</p>
           </div>
-          <Button
-            transparent
-            variant="outline"
-            onClick={downloadTemplate}
-            className="animate-scale-in"
-          >
-            <Download size={20} className="mr-2" />
-            Download Template
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              transparent
+              variant="outline"
+              onClick={downloadCSVTemplate}
+              className="animate-scale-in"
+            >
+              <Download size={20} className="mr-2" />
+              Download CSV Template
+            </Button>
+            <Button
+              transparent
+              variant="outline"
+              onClick={downloadJSONTemplate}
+              className="animate-scale-in"
+            >
+              <Download size={20} className="mr-2" />
+              Download JSON Template
+            </Button>
+          </div>
         </div>
 
         <Card className="animate-slide-down">
@@ -200,6 +317,14 @@ export const TicketImport = () => {
               <p className="text-sm text-gray-600 mb-4">
                 Upload a CSV or JSON file containing ticket data. The system will automatically continue the ticket ID sequence.
               </p>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <p className="text-xs text-blue-800 font-semibold mb-2">📋 Supported Formats:</p>
+                <div className="text-xs text-blue-700 space-y-1">
+                  <p><strong>CSV Format:</strong> First row must contain headers: <code className="bg-blue-100 px-1 rounded">ticketId, title, description, category, priority, status, createdAt, dueDate</code></p>
+                  <p><strong>JSON Format:</strong> Array of ticket objects with fields: <code className="bg-blue-100 px-1 rounded">ticketId, title, description, category, priority, status, createdAt, dueDate</code></p>
+                  <p className="mt-2"><strong>Note:</strong> Download templates above to see the exact format with sample data.</p>
+                </div>
+              </div>
               <div className="flex items-center space-x-4">
                 <label className="flex-1 cursor-pointer">
                   <input

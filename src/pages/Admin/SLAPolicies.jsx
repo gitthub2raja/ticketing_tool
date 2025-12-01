@@ -21,8 +21,10 @@ export const SLAPolicies = () => {
     name: '',
     organization: '',
     priority: '',
-    responseTime: '',
-    resolutionTime: '',
+    responseTimeHours: '',
+    responseTimeMinutes: '',
+    resolutionTimeHours: '',
+    resolutionTimeMinutes: '',
     description: '',
     isActive: true,
   })
@@ -57,15 +59,34 @@ export const SLAPolicies = () => {
     }
   }
 
+  // Convert hours (decimal) to hours and minutes
+  const hoursToHoursMinutes = (totalHours) => {
+    if (!totalHours && totalHours !== 0) return { hours: '', minutes: '' }
+    const hours = Math.floor(totalHours)
+    const minutes = Math.round((totalHours - hours) * 60)
+    return { hours: hours.toString(), minutes: minutes.toString() }
+  }
+
+  // Convert hours and minutes to total hours (decimal)
+  const hoursMinutesToHours = (hours, minutes) => {
+    const h = parseFloat(hours) || 0
+    const m = parseFloat(minutes) || 0
+    return h + (m / 60)
+  }
+
   const handleOpenModal = (policy = null) => {
     if (policy) {
       setEditingPolicy(policy)
+      const responseTime = hoursToHoursMinutes(policy.responseTime)
+      const resolutionTime = hoursToHoursMinutes(policy.resolutionTime)
       setFormData({
         name: policy.name || '',
         organization: policy.organization?._id || policy.organization || '',
         priority: policy.priority || '',
-        responseTime: policy.responseTime || '',
-        resolutionTime: policy.resolutionTime || '',
+        responseTimeHours: responseTime.hours,
+        responseTimeMinutes: responseTime.minutes,
+        resolutionTimeHours: resolutionTime.hours,
+        resolutionTimeMinutes: resolutionTime.minutes,
         description: policy.description || '',
         isActive: policy.isActive !== undefined ? policy.isActive : true,
       })
@@ -75,8 +96,10 @@ export const SLAPolicies = () => {
         name: '',
         organization: selectedOrganization || '',
         priority: '',
-        responseTime: '',
-        resolutionTime: '',
+        responseTimeHours: '',
+        responseTimeMinutes: '0',
+        resolutionTimeHours: '',
+        resolutionTimeMinutes: '0',
         description: '',
         isActive: true,
       })
@@ -91,8 +114,10 @@ export const SLAPolicies = () => {
       name: '',
       organization: selectedOrganization || '',
       priority: '',
-      responseTime: '',
-      resolutionTime: '',
+      responseTimeHours: '',
+      responseTimeMinutes: '',
+      resolutionTimeHours: '',
+      resolutionTimeMinutes: '',
       description: '',
       isActive: true,
     })
@@ -101,11 +126,36 @@ export const SLAPolicies = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      // Convert hours and minutes to total hours (decimal)
+      const responseTime = hoursMinutesToHours(formData.responseTimeHours, formData.responseTimeMinutes)
+      const resolutionTime = hoursMinutesToHours(formData.resolutionTimeHours, formData.resolutionTimeMinutes)
+
+      if (responseTime <= 0) {
+        toast.error('Response time must be greater than 0')
+        return
+      }
+
+      if (resolutionTime <= 0) {
+        toast.error('Resolution time must be greater than 0')
+        return
+      }
+
+      const submitData = {
+        ...formData,
+        responseTime: responseTime,
+        resolutionTime: resolutionTime,
+      }
+      // Remove hours/minutes fields before submitting
+      delete submitData.responseTimeHours
+      delete submitData.responseTimeMinutes
+      delete submitData.resolutionTimeHours
+      delete submitData.resolutionTimeMinutes
+
       if (editingPolicy) {
-        await adminAPI.updateSLAPolicy(editingPolicy._id, formData)
+        await adminAPI.updateSLAPolicy(editingPolicy._id, submitData)
         toast.success('SLA Policy updated successfully!')
       } else {
-        await adminAPI.createSLAPolicy(formData)
+        await adminAPI.createSLAPolicy(submitData)
         toast.success('SLA Policy created successfully!')
       }
       handleCloseModal()
@@ -143,6 +193,21 @@ export const SLAPolicies = () => {
     { value: 'medium', label: 'Medium' },
     { value: 'low', label: 'Low' },
   ]
+
+  // Format time display (hours to hours and minutes)
+  const formatTimeDisplay = (totalHours) => {
+    if (!totalHours && totalHours !== 0) return '0h 0m'
+    const hours = Math.floor(totalHours)
+    const minutes = Math.round((totalHours - hours) * 60)
+    if (hours > 0 && minutes > 0) {
+      return `${hours}h ${minutes}m`
+    } else if (hours > 0) {
+      return `${hours}h`
+    } else if (minutes > 0) {
+      return `${minutes}m`
+    }
+    return '0h 0m'
+  }
 
   return (
     <Layout>
@@ -228,11 +293,15 @@ export const SLAPolicies = () => {
                 <div className="space-y-2 pt-4 border-t border-gray-200">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Response Time:</span>
-                    <span className="text-sm font-semibold text-gray-900">{policy.responseTime} hours</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {formatTimeDisplay(policy.responseTime)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Resolution Time:</span>
-                    <span className="text-sm font-semibold text-gray-900">{policy.resolutionTime} hours</span>
+                    <span className="text-sm font-semibold text-gray-900">
+                      {formatTimeDisplay(policy.resolutionTime)}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Status:</span>
@@ -283,28 +352,76 @@ export const SLAPolicies = () => {
               required
             />
 
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Response Time (hours)"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="e.g., 4"
-                value={formData.responseTime}
-                onChange={(e) => setFormData({ ...formData, responseTime: e.target.value })}
-                required
-              />
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Response Time *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Hours"
+                      value={formData.responseTimeHours}
+                      onChange={(e) => setFormData({ ...formData, responseTimeHours: e.target.value })}
+                      required
+                    />
+                    <span className="text-xs text-gray-500 mt-1 block">Hours</span>
+                  </div>
+                  <div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      placeholder="Minutes"
+                      value={formData.responseTimeMinutes}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 59)) {
+                          setFormData({ ...formData, responseTimeMinutes: val })
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-gray-500 mt-1 block">Minutes (0-59)</span>
+                  </div>
+                </div>
+              </div>
 
-              <Input
-                label="Resolution Time (hours)"
-                type="number"
-                min="0"
-                step="0.5"
-                placeholder="e.g., 24"
-                value={formData.resolutionTime}
-                onChange={(e) => setFormData({ ...formData, resolutionTime: e.target.value })}
-                required
-              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Resolution Time *
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Input
+                      type="number"
+                      min="0"
+                      placeholder="Hours"
+                      value={formData.resolutionTimeHours}
+                      onChange={(e) => setFormData({ ...formData, resolutionTimeHours: e.target.value })}
+                      required
+                    />
+                    <span className="text-xs text-gray-500 mt-1 block">Hours</span>
+                  </div>
+                  <div>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="59"
+                      placeholder="Minutes"
+                      value={formData.resolutionTimeMinutes}
+                      onChange={(e) => {
+                        const val = e.target.value
+                        if (val === '' || (parseInt(val) >= 0 && parseInt(val) <= 59)) {
+                          setFormData({ ...formData, resolutionTimeMinutes: val })
+                        }
+                      }}
+                    />
+                    <span className="text-xs text-gray-500 mt-1 block">Minutes (0-59)</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <Input
