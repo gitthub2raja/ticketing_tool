@@ -9,7 +9,17 @@ const emailTemplateSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['daily-open-tickets', 'daily-report', 'weekly-report', 'monthly-report', 'custom'],
+    enum: [
+      'ticket-created',
+      'ticket-updated',
+      'ticket-assigned',
+      'ticket-resolved',
+      'daily-open-tickets',
+      'daily-report',
+      'weekly-report',
+      'monthly-report',
+      'custom'
+    ],
     required: true,
   },
   subject: {

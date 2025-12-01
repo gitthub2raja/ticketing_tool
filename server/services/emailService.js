@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer'
 import EmailSettings from '../models/EmailSettings.js'
+import EmailTemplate from '../models/EmailTemplate.js'
 
 // Create SMTP transporter
 const createTransporter = async () => {
@@ -81,51 +82,246 @@ export const sendEmail = async (to, subject, html, text = null) => {
   }
 }
 
+// Render template with variables
+const renderEmailTemplate = (template, data) => {
+  let rendered = template
+  Object.keys(data).forEach(key => {
+    const value = data[key]
+    const regex = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+    rendered = rendered.replace(regex, value !== null && value !== undefined ? String(value) : '')
+  })
+  return rendered
+}
+
 // Send ticket acknowledgment email
 export const sendTicketAcknowledgment = async (ticket, customerEmail) => {
-  const subject = `Ticket #${ticket.ticketId} Created - ${ticket.title}`
+  // Check for custom template
+  let customTemplate = null
+  try {
+    customTemplate = await EmailTemplate.findOne({
+      type: 'ticket-created',
+      isActive: true,
+      $or: [
+        { organization: ticket.organization || null },
+        { organization: null }, // Global template
+      ],
+    }).sort({ organization: -1 }) // Prefer org-specific over global
+  } catch (error) {
+    console.error('Error fetching custom template:', error)
+  }
+
+  let subject = `Ticket #${ticket.ticketId} Created - ${ticket.title}`
+  let html = ''
+  
+  // Get priority badge color
+  const getPriorityColor = (priority) => {
+    const colors = {
+      'low': '#6b7280',
+      'medium': '#3b82f6',
+      'high': '#f59e0b',
+      'urgent': '#ef4444',
+    }
+    return colors[priority] || '#3b82f6'
+  }
+
+  const priorityColor = getPriorityColor(ticket.priority)
   
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: #3b82f6; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-        .ticket-info { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #3b82f6; }
-        .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
-        .button { display: inline-block; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+          line-height: 1.6; 
+          color: #333; 
+          background-color: #f5f5f5;
+          padding: 20px;
+        }
+        .email-container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background-color: #ffffff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header-banner { 
+          background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); 
+          color: white; 
+          padding: 30px 20px; 
+          text-align: center; 
+        }
+        .header-banner h1 {
+          font-size: 28px;
+          font-weight: 600;
+          margin: 0;
+          letter-spacing: 0.5px;
+        }
+        .content { 
+          padding: 30px 20px; 
+          background: #ffffff;
+        }
+        .greeting {
+          font-size: 16px;
+          color: #1f2937;
+          margin-bottom: 15px;
+        }
+        .intro-text {
+          font-size: 15px;
+          color: #4b5563;
+          margin-bottom: 25px;
+          line-height: 1.7;
+        }
+        .ticket-details { 
+          background: #f9fafb; 
+          padding: 20px; 
+          margin: 25px 0; 
+          border-radius: 6px;
+          border: 1px solid #e5e7eb;
+        }
+        .ticket-details h3 {
+          font-size: 18px;
+          color: #1f2937;
+          margin-bottom: 15px;
+          font-weight: 600;
+        }
+        .detail-row {
+          margin-bottom: 12px;
+          font-size: 14px;
+        }
+        .detail-row:last-child {
+          margin-bottom: 0;
+        }
+        .detail-label {
+          font-weight: 600;
+          color: #374151;
+          display: inline-block;
+          min-width: 120px;
+        }
+        .detail-value {
+          color: #1f2937;
+        }
+        .priority-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          background-color: ${priorityColor}20;
+          color: ${priorityColor};
+        }
+        .status-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          background-color: #10b98120;
+          color: #10b981;
+        }
+        .description-box {
+          background: #ffffff;
+          padding: 15px;
+          border-radius: 4px;
+          border-left: 3px solid #3b82f6;
+          margin-top: 10px;
+          font-size: 14px;
+          color: #4b5563;
+          line-height: 1.6;
+        }
+        .footer-text {
+          font-size: 14px;
+          color: #6b7280;
+          margin-top: 25px;
+          line-height: 1.6;
+        }
+        .signature {
+          margin-top: 20px;
+          font-size: 14px;
+          color: #1f2937;
+        }
+        .signature strong {
+          color: #111827;
+        }
+        .footer-note {
+          text-align: center;
+          padding: 20px;
+          background: #f9fafb;
+          border-top: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #9ca3af;
+        }
+        @media only screen and (max-width: 600px) {
+          .email-container {
+            width: 100% !important;
+          }
+          .content {
+            padding: 20px 15px !important;
+          }
+          .header-banner {
+            padding: 25px 15px !important;
+          }
+          .header-banner h1 {
+            font-size: 24px !important;
+          }
+        }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="header">
+      <div class="email-container">
+        <div class="header-banner">
           <h1>Ticket Created Successfully</h1>
         </div>
         <div class="content">
-          <p>Dear Customer,</p>
-          <p>Thank you for contacting us. We have received your request and created a support ticket for you.</p>
+          <p class="greeting">Dear Customer,</p>
+          <p class="intro-text">Thank you for contacting us. We have received your request and created a support ticket for you.</p>
           
-          <div class="ticket-info">
+          <div class="ticket-details">
             <h3>Ticket Details:</h3>
-            <p><strong>Ticket ID:</strong> #${ticket.ticketId}</p>
-            <p><strong>Title:</strong> ${ticket.title}</p>
-            <p><strong>Category:</strong> ${ticket.category}</p>
-            <p><strong>Priority:</strong> ${ticket.priority}</p>
-            <p><strong>Status:</strong> ${ticket.status}</p>
-            <p><strong>Description:</strong></p>
-            <p>${ticket.description.replace(/\n/g, '<br>')}</p>
+            <div class="detail-row">
+              <span class="detail-label">Ticket ID:</span>
+              <span class="detail-value">#${ticket.ticketId}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Title:</span>
+              <span class="detail-value">${ticket.title}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Category:</span>
+              <span class="detail-value">${ticket.category}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Priority:</span>
+              <span class="detail-value"><span class="priority-badge">${ticket.priority}</span></span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Status:</span>
+              <span class="detail-value"><span class="status-badge">${ticket.status}</span></span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Description:</span>
+            </div>
+            <div class="description-box">
+              ${ticket.description.replace(/\n/g, '<br>')}
+            </div>
           </div>
           
-          <p>Our support team will review your ticket and respond as soon as possible. You will receive email notifications when there are updates to your ticket.</p>
+          <p class="footer-text">Our support team will review your ticket and respond as soon as possible. You will receive email notifications when there are updates to your ticket.</p>
           
-          <p>If you have any additional information, please reply to this email and it will be added to your ticket.</p>
+          <p class="footer-text">If you have any additional information, please reply to this email and it will be added to your ticket.</p>
           
-          <p>Best regards,<br>Support Team</p>
+          <div class="signature">
+            <strong>Best regards,</strong><br>
+            Support Team
+          </div>
         </div>
-        <div class="footer">
+        <div class="footer-note">
           <p>This is an automated message. Please do not reply directly to this email.</p>
         </div>
       </div>
@@ -138,14 +334,46 @@ export const sendTicketAcknowledgment = async (ticket, customerEmail) => {
 
 // Send ticket update email
 export const sendTicketUpdateEmail = async (ticket, customerEmail, changes) => {
-  const subject = `Ticket #${ticket.ticketId} Updated - ${ticket.title}`
+  // Check for custom template
+  let customTemplate = null
+  try {
+    customTemplate = await EmailTemplate.findOne({
+      type: 'ticket-updated',
+      isActive: true,
+      $or: [
+        { organization: ticket.organization || null },
+        { organization: null }, // Global template
+      ],
+    }).sort({ organization: -1 }) // Prefer org-specific over global
+  } catch (error) {
+    console.error('Error fetching custom template:', error)
+  }
+
+  let subject = `Ticket #${ticket.ticketId} Updated - ${ticket.title}`
+  let html = ''
   
-  const changesHtml = Object.entries(changes)
-    .map(([key, value]) => `<li><strong>${key}:</strong> ${value}</li>`)
-    .join('')
-  
-  // Get status color
-  const getStatusColor = (status) => {
+  // If custom template exists, use it
+  if (customTemplate) {
+    const templateData = {
+      ticketId: ticket.ticketId,
+      ticketTitle: ticket.title,
+      ticketCategory: ticket.category,
+      ticketPriority: ticket.priority,
+      ticketStatus: ticket.status,
+      customerName: ticket.creator?.name || 'Customer',
+      assigneeName: ticket.assignee?.name || 'Unassigned',
+      changes: changes ? Object.entries(changes).map(([k, v]) => `${k}: ${v}`).join(', ') : '',
+    }
+    subject = renderEmailTemplate(customTemplate.subject, templateData)
+    html = renderEmailTemplate(customTemplate.htmlBody, templateData)
+  } else {
+    // Use default template
+    const changesHtml = Object.entries(changes || {})
+      .map(([key, value]) => `<li style="margin-bottom: 8px;"><strong>${key}:</strong> ${value}</li>`)
+      .join('')
+    
+    // Get status color
+    const getStatusColor = (status) => {
     const colors = {
       'open': '#3b82f6',
       'approval-pending': '#f59e0b',
@@ -158,62 +386,257 @@ export const sendTicketUpdateEmail = async (ticket, customerEmail, changes) => {
     return colors[status] || '#3b82f6'
   }
 
+  // Get priority color
+  const getPriorityColor = (priority) => {
+    const colors = {
+      'low': '#6b7280',
+      'medium': '#3b82f6',
+      'high': '#f59e0b',
+      'urgent': '#ef4444',
+    }
+    return colors[priority] || '#3b82f6'
+  }
+
   const statusColor = getStatusColor(ticket.status)
+  const priorityColor = getPriorityColor(ticket.priority)
   
-  const html = `
+  html = `
     <!DOCTYPE html>
     <html>
     <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-        .header { background: ${statusColor}; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }
-        .content { background: #f9fafb; padding: 20px; border: 1px solid #e5e7eb; }
-        .ticket-info { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid ${statusColor}; }
-        .changes { background: white; padding: 15px; margin: 15px 0; border-left: 4px solid #10b981; }
-        .footer { text-align: center; padding: 20px; color: #6b7280; font-size: 12px; }
-        .button { display: inline-block; padding: 10px 20px; background: #3b82f6; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+          line-height: 1.6; 
+          color: #333; 
+          background-color: #f5f5f5;
+          padding: 20px;
+        }
+        .email-container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background-color: #ffffff;
+          border-radius: 8px;
+          overflow: hidden;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header-banner { 
+          background: linear-gradient(135deg, ${statusColor} 0%, ${statusColor}dd 100%); 
+          color: white; 
+          padding: 30px 20px; 
+          text-align: center; 
+        }
+        .header-banner h1 {
+          font-size: 28px;
+          font-weight: 600;
+          margin: 0;
+          letter-spacing: 0.5px;
+        }
+        .content { 
+          padding: 30px 20px; 
+          background: #ffffff;
+        }
+        .greeting {
+          font-size: 16px;
+          color: #1f2937;
+          margin-bottom: 15px;
+        }
+        .intro-text {
+          font-size: 15px;
+          color: #4b5563;
+          margin-bottom: 25px;
+          line-height: 1.7;
+        }
+        .ticket-details { 
+          background: #f9fafb; 
+          padding: 20px; 
+          margin: 25px 0; 
+          border-radius: 6px;
+          border: 1px solid #e5e7eb;
+        }
+        .ticket-details h3 {
+          font-size: 18px;
+          color: #1f2937;
+          margin-bottom: 15px;
+          font-weight: 600;
+        }
+        .detail-row {
+          margin-bottom: 12px;
+          font-size: 14px;
+        }
+        .detail-row:last-child {
+          margin-bottom: 0;
+        }
+        .detail-label {
+          font-weight: 600;
+          color: #374151;
+          display: inline-block;
+          min-width: 120px;
+        }
+        .detail-value {
+          color: #1f2937;
+        }
+        .priority-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          background-color: ${priorityColor}20;
+          color: ${priorityColor};
+        }
+        .status-badge {
+          display: inline-block;
+          padding: 4px 12px;
+          border-radius: 12px;
+          font-size: 12px;
+          font-weight: 600;
+          text-transform: uppercase;
+          background-color: ${statusColor}20;
+          color: ${statusColor};
+        }
+        .changes-box {
+          background: #f0fdf4;
+          padding: 20px;
+          border-radius: 6px;
+          border-left: 3px solid #10b981;
+          margin: 25px 0;
+        }
+        .changes-box h3 {
+          font-size: 18px;
+          color: #1f2937;
+          margin-bottom: 15px;
+          font-weight: 600;
+        }
+        .changes-box ul {
+          list-style: none;
+          padding: 0;
+          margin: 0;
+        }
+        .changes-box li {
+          font-size: 14px;
+          color: #4b5563;
+          margin-bottom: 8px;
+        }
+        .view-button {
+          display: inline-block;
+          padding: 12px 24px;
+          background: #3b82f6;
+          color: white;
+          text-decoration: none;
+          border-radius: 6px;
+          margin: 20px 0;
+          font-weight: 600;
+          font-size: 14px;
+        }
+        .view-button:hover {
+          background: #2563eb;
+        }
+        .footer-text {
+          font-size: 14px;
+          color: #6b7280;
+          margin-top: 25px;
+          line-height: 1.6;
+        }
+        .signature {
+          margin-top: 20px;
+          font-size: 14px;
+          color: #1f2937;
+        }
+        .signature strong {
+          color: #111827;
+        }
+        .footer-note {
+          text-align: center;
+          padding: 20px;
+          background: #f9fafb;
+          border-top: 1px solid #e5e7eb;
+          font-size: 12px;
+          color: #9ca3af;
+        }
+        @media only screen and (max-width: 600px) {
+          .email-container {
+            width: 100% !important;
+          }
+          .content {
+            padding: 20px 15px !important;
+          }
+          .header-banner {
+            padding: 25px 15px !important;
+          }
+          .header-banner h1 {
+            font-size: 24px !important;
+          }
+        }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="header">
+      <div class="email-container">
+        <div class="header-banner">
           <h1>Ticket Updated</h1>
         </div>
         <div class="content">
-          <p>Dear Customer,</p>
-          <p>Your ticket #${ticket.ticketId} has been updated.</p>
+          <p class="greeting">Dear Customer,</p>
+          <p class="intro-text">Your ticket #${ticket.ticketId} has been updated.</p>
           
-          <div class="ticket-info">
+          <div class="ticket-details">
             <h3>Current Ticket Status:</h3>
-            <p><strong>Ticket ID:</strong> #${ticket.ticketId}</p>
-            <p><strong>Title:</strong> ${ticket.title}</p>
-            <p><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${ticket.status.toUpperCase().replace('-', ' ')}</span></p>
-            <p><strong>Priority:</strong> ${ticket.priority.toUpperCase()}</p>
-            <p><strong>Assignee:</strong> ${ticket.assignee?.name || 'Unassigned'}</p>
-            ${ticket.dueDate ? `<p><strong>Due Date:</strong> ${new Date(ticket.dueDate).toLocaleString()}</p>` : ''}
+            <div class="detail-row">
+              <span class="detail-label">Ticket ID:</span>
+              <span class="detail-value">#${ticket.ticketId}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Title:</span>
+              <span class="detail-value">${ticket.title}</span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Status:</span>
+              <span class="detail-value"><span class="status-badge">${ticket.status.toUpperCase().replace('-', ' ')}</span></span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Priority:</span>
+              <span class="detail-value"><span class="priority-badge">${ticket.priority}</span></span>
+            </div>
+            <div class="detail-row">
+              <span class="detail-label">Assignee:</span>
+              <span class="detail-value">${ticket.assignee?.name || 'Unassigned'}</span>
+            </div>
+            ${ticket.dueDate ? `
+            <div class="detail-row">
+              <span class="detail-label">Due Date:</span>
+              <span class="detail-value">${new Date(ticket.dueDate).toLocaleString()}</span>
+            </div>
+            ` : ''}
           </div>
           
           ${changesHtml ? `
-          <div class="changes">
+          <div class="changes-box">
             <h3>Recent Changes:</h3>
             <ul>${changesHtml}</ul>
           </div>
           ` : ''}
           
-          <p>You will receive email notifications for all status updates on this ticket.</p>
+          <p class="footer-text">You will receive email notifications for all status updates on this ticket.</p>
           
-          <p><a href="${process.env.FRONTEND_URL || 'http://localhost'}/tickets/${ticket.ticketId}" class="button">View Ticket</a></p>
+          <p><a href="${process.env.FRONTEND_URL || 'http://localhost'}/tickets/${ticket.ticketId}" class="view-button">View Ticket</a></p>
           
-          <p>Best regards,<br>Support Team</p>
+          <div class="signature">
+            <strong>Best regards,</strong><br>
+            Support Team
+          </div>
         </div>
-        <div class="footer">
+        <div class="footer-note">
           <p>This is an automated message.</p>
         </div>
       </div>
     </body>
     </html>
-  `
+    `
+  }
 
   return await sendEmail(customerEmail, subject, html)
 }

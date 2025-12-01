@@ -26,6 +26,7 @@ import { Settings } from './pages/Settings'
 import { Users } from './pages/Admin/Users'
 import { Roles } from './pages/Admin/Roles'
 import { EmailSettings } from './pages/Admin/EmailSettings'
+import { EmailTemplates } from './pages/Admin/EmailTemplates'
 import { SSOConfig } from './pages/Admin/SSOConfig'
 import { LogoManagement } from './pages/Admin/LogoManagement'
 import { Organizations } from './pages/Admin/Organizations'
@@ -230,6 +231,14 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <EmailSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/email-templates"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <EmailTemplates />
                 </ProtectedRoute>
               }
             />

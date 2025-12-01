@@ -278,6 +278,36 @@ export const adminAPI = {
     })
   },
   
+  // Email Templates
+  getEmailTemplates: async () => {
+    return apiCall('/email-templates')
+  },
+  getEmailTemplate: async (id) => {
+    return apiCall(`/email-templates/${id}`)
+  },
+  createEmailTemplate: async (templateData) => {
+    return apiCall('/email-templates', {
+      method: 'POST',
+      body: JSON.stringify(templateData),
+    })
+  },
+  updateEmailTemplate: async (id, templateData) => {
+    return apiCall(`/email-templates/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(templateData),
+    })
+  },
+  deleteEmailTemplate: async (id) => {
+    return apiCall(`/email-templates/${id}`, {
+      method: 'DELETE',
+    })
+  },
+  previewEmailTemplate: async (id) => {
+    return apiCall(`/email-templates/${id}/preview`, {
+      method: 'POST',
+    })
+  },
+  
   // Backup & Restore
   createBackup: async () => {
     return apiCall('/backup/create', {

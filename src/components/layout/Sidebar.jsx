@@ -21,7 +21,8 @@ import {
   MessageSquare,
   Send,
   HelpCircle,
-  Database
+  Database,
+  FileCode
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLogo } from '../../contexts/LogoContext'
@@ -53,6 +54,7 @@ const adminMenuItems = [
   { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/admin/api-keys', icon: Key, label: 'API Keys' },
   { path: '/admin/email', icon: Mail, label: 'Email Settings' },
+  { path: '/admin/email-templates', icon: FileCode, label: 'Email Templates' },
   { path: '/admin/email-automation', icon: Send, label: 'Email Automation' },
   { path: '/admin/faq', icon: HelpCircle, label: 'FAQ Management' },
   { path: '/admin/chat-history', icon: MessageSquare, label: 'Chat History' },
