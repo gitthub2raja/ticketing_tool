@@ -277,6 +277,74 @@ export const adminAPI = {
       method: 'DELETE',
     })
   },
+  
+  // Backup & Restore
+  createBackup: async () => {
+    return apiCall('/backup/create', {
+      method: 'POST',
+    })
+  },
+  listBackups: async () => {
+    return apiCall('/backup/list')
+  },
+  downloadBackup: async (backupName) => {
+    const token = getAuthToken()
+    const response = await fetch(`${API_BASE_URL}/backup/download/${backupName}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Download failed' }))
+      throw new Error(error.message || 'Download failed')
+    }
+    
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${backupName}.json`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
+    
+    return { success: true }
+  },
+  deleteBackup: async (backupName) => {
+    return apiCall(`/backup/${backupName}`, {
+      method: 'DELETE',
+    })
+  },
+  restoreBackup: async (backupName, clearExisting = false) => {
+    return apiCall('/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify({ backupName, clearExisting }),
+    })
+  },
+  uploadBackup: async (file, clearExisting = false) => {
+    const token = getAuthToken()
+    const formData = new FormData()
+    formData.append('backupFile', file)
+    formData.append('clearExisting', clearExisting ? 'true' : 'false')
+    
+    const response = await fetch(`${API_BASE_URL}/backup/upload`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
+      },
+      body: formData,
+    })
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Upload failed' }))
+      throw new Error(error.message || 'Upload failed')
+    }
+    
+    return response.json()
+  },
 }
 
 // Organizations API

@@ -30,6 +30,7 @@ import emailAutomationRoutes from './routes/emailAutomation.js'
 import chatbotRoutes from './routes/chatbot.js'
 import faqRoutes from './routes/faq.js'
 import teamsRoutes from './routes/teams.js'
+import backupRoutes from './routes/backup.js'
 
 dotenv.config()
 
@@ -89,6 +90,7 @@ app.use('/api/email-automation', emailAutomationRoutes)
 app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/faq', faqRoutes)
 app.use('/api/teams', teamsRoutes)
+app.use('/api/backup', backupRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

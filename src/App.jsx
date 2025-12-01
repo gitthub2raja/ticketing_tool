@@ -39,6 +39,7 @@ import { EmailAutomation } from './pages/Admin/EmailAutomation'
 import { TeamsIntegration } from './pages/Admin/TeamsIntegration'
 import { FAQ } from './pages/Admin/FAQ'
 import { ChatHistory } from './pages/Admin/ChatHistory'
+import { BackupRestore } from './pages/Admin/BackupRestore'
 
 // Reports Page
 import { Reports } from './pages/Reports'
@@ -309,6 +310,14 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <TeamsIntegration />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/backup-restore"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <BackupRestore />
                 </ProtectedRoute>
               }
             />

@@ -20,7 +20,8 @@ import {
   Key,
   MessageSquare,
   Send,
-  HelpCircle
+  HelpCircle,
+  Database
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLogo } from '../../contexts/LogoContext'
@@ -58,6 +59,7 @@ const adminMenuItems = [
   { path: '/admin/teams-integration', icon: MessageSquare, label: 'Microsoft Teams' },
   { path: '/admin/sso', icon: Shield, label: 'SSO Configuration' },
   { path: '/admin/logo', icon: ImageIcon, label: 'Logo Management' },
+  { path: '/admin/backup-restore', icon: Database, label: 'Backup & Restore' },
 ]
 
 const NavItem = ({ item, onClick }) => {

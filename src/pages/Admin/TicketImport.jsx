@@ -200,41 +200,39 @@ export const TicketImport = () => {
               <p className="text-sm text-gray-600 mb-4">
                 Upload a CSV or JSON file containing ticket data. The system will automatically continue the ticket ID sequence.
               </p>
-              <div
-                className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-200 ${
-                  isDragging
-                    ? 'border-primary-500 bg-primary-50'
-                    : 'border-gray-300 hover:border-primary-500'
-                }`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => document.getElementById('file-upload')?.click()}
-              >
-                <input
-                  type="file"
-                  accept=".csv,.json"
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer flex flex-col items-center"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <Upload
-                    className={`mb-2 transition-colors ${
-                      isDragging ? 'text-primary-500' : 'text-gray-400'
-                    }`}
-                    size={48}
+              <div className="flex items-center space-x-4">
+                <label className="flex-1 cursor-pointer">
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    onChange={handleFileChange}
+                    className="hidden"
+                    id="file-upload"
                   />
-                  <span className="text-sm font-medium text-gray-700">
-                    {file ? file.name : 'Click to upload or drag and drop'}
-                  </span>
-                  <span className="text-xs text-gray-500 mt-1">
-                    CSV or JSON files only
-                  </span>
+                  <div
+                    className={`flex items-center justify-center px-6 py-4 border-2 border-dashed rounded-xl transition-all duration-300 ${
+                      isDragging
+                        ? 'border-primary-500 bg-primary-50'
+                        : 'border-gray-300 hover:border-primary-500'
+                    } bg-white/50 backdrop-blur-sm hover:bg-white/80`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                  >
+                    <div className="text-center">
+                      <Upload
+                        className={`mx-auto h-8 w-8 mb-2 transition-colors ${
+                          isDragging ? 'text-primary-500' : 'text-gray-400'
+                        }`}
+                      />
+                      <span className="text-sm text-gray-600">
+                        {file ? file.name : 'Click to upload or drag and drop'}
+                      </span>
+                      <p className="text-xs text-gray-500 mt-1">
+                        CSV or JSON files only
+                      </p>
+                    </div>
+                  </div>
                 </label>
               </div>
             </div>
