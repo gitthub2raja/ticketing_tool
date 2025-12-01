@@ -4,10 +4,11 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { MessageSquare, X, Send, Paperclip, Minimize2, Maximize2 } from 'lucide-react'
+import { MessageSquare, X, Send, Paperclip, Minimize2, Maximize2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { chatbotAPI } from '../services/api'
+import { ChatAvatar3D } from './ChatAvatar3D'
 
 export const ChatWidget = () => {
   const { user } = useAuth()
@@ -19,6 +20,7 @@ export const ChatWidget = () => {
   const [loading, setLoading] = useState(false)
   const [typing, setTyping] = useState(false)
   const [error, setError] = useState(null)
+  const [show3DAvatar, setShow3DAvatar] = useState(true)
   const messagesEndRef = useRef(null)
   const fileInputRef = useRef(null)
 
@@ -190,10 +192,17 @@ export const ChatWidget = () => {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-all z-50 flex items-center justify-center group"
+          className="fixed bottom-6 right-6 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-all z-[9998] flex items-center justify-center group"
           aria-label="Open chat"
+          style={{
+            width: '56px',
+            height: '56px',
+          }}
         >
           <MessageSquare size={24} />
+          <span className="absolute -top-1 -right-1 bg-green-500 text-white text-xs rounded-full w-3 h-3 flex items-center justify-center animate-pulse" title="3D Avatar Enabled">
+            <span className="w-2 h-2 bg-white rounded-full"></span>
+          </span>
           <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
             !
           </span>
@@ -203,11 +212,12 @@ export const ChatWidget = () => {
       {/* Chat Window */}
       {isOpen && (
         <div
-          className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl z-50 flex flex-col transition-all ${
-            isMinimized ? 'w-80 h-14' : 'w-96 h-[600px]'
+          className={`fixed bottom-6 right-6 bg-white rounded-lg shadow-2xl z-[9999] flex flex-col transition-all ${
+            isMinimized ? 'w-80 h-14' : 'w-96 h-[600px] max-h-[600px]'
           }`}
           style={{
             boxShadow: '0 10px 40px rgba(0, 0, 0, 0.2)',
+            maxHeight: 'calc(100vh - 48px)',
           }}
         >
           {/* Header */}
@@ -217,6 +227,14 @@ export const ChatWidget = () => {
               <span className="font-semibold">Support Chat</span>
             </div>
             <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShow3DAvatar(!show3DAvatar)}
+                className="p-1 hover:bg-primary-700 rounded transition-colors"
+                aria-label={show3DAvatar ? 'Hide 3D Avatar' : 'Show 3D Avatar'}
+                title={show3DAvatar ? 'Hide 3D Avatar' : 'Show 3D Avatar'}
+              >
+                {show3DAvatar ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
               <button
                 onClick={() => setIsMinimized(!isMinimized)}
                 className="p-1 hover:bg-primary-700 rounded transition-colors"
@@ -250,11 +268,25 @@ export const ChatWidget = () => {
                   </button>
                 </div>
               )}
+              {/* 3D Avatar Section */}
+              {show3DAvatar && (
+                <div className="h-48 bg-gradient-to-b from-primary-50 to-gray-50 border-b border-gray-200 relative overflow-hidden">
+                  <div className="absolute inset-0">
+                    <ChatAvatar3D typing={typing} showParticles={true} />
+                  </div>
+                  <div className="absolute bottom-2 left-1/2 transform -translate-x-1/2 bg-black/50 text-white text-xs px-3 py-1 rounded-full">
+                    {typing ? 'Thinking...' : 'Online'}
+                  </div>
+                </div>
+              )}
+
               {/* Messages */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
                 {messages.length === 0 && !loading && !error && (
                   <div className="text-center text-gray-500 py-8">
-                    <MessageSquare className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                    {!show3DAvatar && (
+                      <MessageSquare className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                    )}
                     <p>Start a conversation!</p>
                     <p className="text-sm mt-2">I can help you create tickets, check status, and answer questions.</p>
                   </div>
