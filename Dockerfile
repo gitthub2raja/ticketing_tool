@@ -4,16 +4,16 @@ FROM node:20-alpine as build
 WORKDIR /app
 
 # Copy package files
-COPY package*.json ./
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm ci
 
 # Copy source code
-COPY . .
+COPY frontend/ .
 
 # Build argument for API URL
-ARG VITE_API_URL=http://localhost/api
+ARG VITE_API_URL=/api
 ENV VITE_API_URL=$VITE_API_URL
 
 # Build the application
