@@ -24,7 +24,7 @@ async def get_api_keys(
     if organization:
         query["organization"] = ObjectId(organization)
     
-    cursor = db.api_keys.find(query)
+    cursor = db.apikeys.find(query)
     keys = await cursor.to_list(length=100)
     
     result = []
@@ -118,7 +118,7 @@ async def create_api_key(key_data: dict, current_user: dict = Depends(get_curren
     elif current_user.get("organization"):
         key_doc["organization"] = ObjectId(current_user["organization"])
     
-    result = await db.api_keys.insert_one(key_doc)
+    result = await db.apikeys.insert_one(key_doc)
     
     # Return key only once
     return {
@@ -142,12 +142,12 @@ async def update_api_key(key_id: str, key_data: dict, current_user: dict = Depen
     if "is_active" in key_data:
         update_doc["is_active"] = key_data["is_active"]
     
-    await db.api_keys.update_one(
+    await db.apikeys.update_one(
         {"_id": ObjectId(key_id)},
         {"$set": update_doc}
     )
     
-    key = await db.api_keys.find_one({"_id": ObjectId(key_id)})
+    key = await db.apikeys.find_one({"_id": ObjectId(key_id)})
     key["id"] = str(key["_id"])
     if key.get("organization"):
         key["organization"] = str(key["organization"])
@@ -164,7 +164,7 @@ async def delete_api_key(key_id: str, current_user: dict = Depends(get_current_a
     db = await get_database()
     
     try:
-        result = await db.api_keys.delete_one({"_id": ObjectId(key_id)})
+        result = await db.apikeys.delete_one({"_id": ObjectId(key_id)})
         if result.deleted_count == 0:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

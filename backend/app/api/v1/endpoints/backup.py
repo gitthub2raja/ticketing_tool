@@ -31,7 +31,7 @@ async def create_backup(current_user: dict = Depends(get_current_admin)):
     # Backup all collections
     collections = ["users", "tickets", "organizations", "categories", "departments", 
                    "roles", "sla_policies", "email_templates", "email_automations",
-                   "faqs", "api_keys", "chat_sessions", "teams_configs", "sso_configs",
+                   "faqs", "apikeys", "chat_sessions", "teams_configs", "sso_configs",
                    "email_settings", "logos"]
     
     for collection_name in collections:
