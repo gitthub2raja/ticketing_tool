@@ -1,7 +1,7 @@
 """
 Ticket endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from typing import List, Optional
 from app.api.v1.schemas.ticket import (
     TicketCreate, TicketUpdate, TicketResponse,
@@ -66,6 +66,7 @@ def normalize_ticket(ticket: dict) -> dict:
         else:
             normalized[new_key] = None  # Ensure key exists even if null
     
+    # Handle approved_by - will be populated by calling function if needed
     if ticket.get("approved_by"):
         normalized["approvedBy"] = str(ticket["approved_by"])
     
@@ -163,39 +164,87 @@ async def get_ticket(ticket_id: str, current_user: dict = Depends(get_current_us
     return normalize_ticket(ticket)
 
 
-@router.post("/", response_model=TicketResponse)
+@router.post("/")
 async def create_ticket(
-    ticket_data: TicketCreate,
+    title: str = Form(...),
+    description: str = Form(...),
+    category: Optional[str] = Form(None),
+    priority: str = Form("medium"),
+    assignee: Optional[str] = Form(None),
+    department: Optional[str] = Form(None),
+    ticketId: Optional[int] = Form(None),
+    attachments: List[UploadFile] = File([]),
     current_user: dict = Depends(get_current_user)
 ):
-    """Create new ticket"""
+    """Create new ticket with file upload support"""
     db = await get_database()
     
-    # Generate ticket ID
-    ticket_id = generate_ticket_id()
+    # Check ticket settings for manual/auto ticket ID
+    ticket_settings = await db.ticket_settings.find_one({})
+    manual_ticket_id_enabled = ticket_settings.get("manualTicketId", False) if ticket_settings else False
+    
+    # Generate or use manual ticket ID
+    if manual_ticket_id_enabled and ticketId:
+        # Use manual ticket ID - validate it doesn't exist
+        existing = await db.tickets.find_one({"ticket_id": str(ticketId)})
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Ticket ID {ticketId} already exists"
+            )
+        ticket_id = str(ticketId)
+    else:
+        # Auto-generate ticket ID
+        ticket_id = generate_ticket_id()
+    
+    # Handle file uploads
+    attachment_paths = []
+    if attachments:
+        for file in attachments:
+            if file.filename:
+                # Save file
+                file_path = os.path.join(settings.UPLOAD_DIR, f"{ticket_id}_{file.filename}")
+                os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+                content = await file.read()
+                async with aiofiles.open(file_path, 'wb') as f:
+                    await f.write(content)
+                attachment_paths.append(file_path)
     
     # Create ticket document
     ticket_doc = {
         "ticket_id": ticket_id,
-        "title": ticket_data.title,
-        "description": ticket_data.description,
+        "title": title,
+        "description": description,
         "status": "open",
-        "priority": ticket_data.priority,
+        "priority": priority,
         "creator": ObjectId(current_user["id"]),
-        "attachments": [],
+        "attachments": attachment_paths,
         "comments": [],
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
     }
     
-    if ticket_data.category:
-        ticket_doc["category"] = ObjectId(ticket_data.category)
-    if ticket_data.department:
-        ticket_doc["department"] = ObjectId(ticket_data.department)
+    if category:
+        try:
+            # Try as ObjectId first
+            ticket_doc["category"] = ObjectId(category)
+        except:
+            # If category is a name, try to find by name
+            cat = await db.categories.find_one({"name": category})
+            if cat:
+                ticket_doc["category"] = cat["_id"]
+    if department:
+        try:
+            ticket_doc["department"] = ObjectId(department)
+        except:
+            pass
+    if assignee:
+        try:
+            ticket_doc["assignee"] = ObjectId(assignee)
+        except:
+            pass
     if current_user.get("organization"):
         ticket_doc["organization"] = ObjectId(current_user["organization"])
-    if ticket_data.due_date:
-        ticket_doc["due_date"] = ticket_data.due_date
     
     result = await db.tickets.insert_one(ticket_doc)
     
@@ -325,7 +374,7 @@ async def update_ticket(
     return normalize_ticket(updated_ticket)
 
 
-@router.post("/{ticket_id}/approve")
+@router.post("/{ticket_id}/approve", response_model=TicketResponse)
 async def approve_ticket(
     ticket_id: str,
     current_user: dict = Depends(get_current_admin)
@@ -333,13 +382,16 @@ async def approve_ticket(
     """Approve ticket (admin only)"""
     db = await get_database()
     
+    # Try to find by ObjectId first
+    ticket = None
     try:
         ticket = await db.tickets.find_one({"_id": ObjectId(ticket_id)})
     except:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found"
-        )
+        pass
+    
+    # If not found by ObjectId, try to find by ticket_id (string like TKT-xxx)
+    if not ticket:
+        ticket = await db.tickets.find_one({"ticket_id": ticket_id})
     
     if not ticket:
         raise HTTPException(
@@ -347,17 +399,39 @@ async def approve_ticket(
             detail="Ticket not found"
         )
     
+    # Update ticket with approval info
+    update_doc = {
+        "status": "approved",
+        "approved_by": ObjectId(current_user["id"]),
+        "approved_at": datetime.utcnow(),
+        "updated_at": datetime.utcnow()
+    }
+    
     await db.tickets.update_one(
-        {"_id": ObjectId(ticket_id)},
-        {
-            "$set": {
-                "status": "approved",
-                "updated_at": datetime.utcnow()
-            }
-        }
+        {"_id": ticket["_id"]},
+        {"$set": update_doc}
     )
     
-    return {"message": "Ticket approved successfully"}
+    # Fetch updated ticket
+    updated_ticket = await db.tickets.find_one({"_id": ticket["_id"]})
+    normalized = normalize_ticket(updated_ticket)
+    
+    # Fetch approved_by user details
+    if updated_ticket.get("approved_by"):
+        try:
+            approved_by_user = await db.users.find_one({"_id": ObjectId(updated_ticket["approved_by"])})
+            if approved_by_user:
+                normalized["approvedBy"] = {
+                    "_id": str(approved_by_user["_id"]),
+                    "id": str(approved_by_user["_id"]),
+                    "name": approved_by_user.get("name", "Unknown"),
+                    "email": approved_by_user.get("email", "")
+                }
+        except Exception as e:
+            print(f"Error fetching approved_by user: {e}")
+            normalized["approvedBy"] = str(updated_ticket["approved_by"])
+    
+    return normalized
 
 
 @router.post("/{ticket_id}/reject")

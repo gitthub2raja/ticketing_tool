@@ -142,10 +142,11 @@ export const ticketsAPI = {
   },
   createWithFiles: async (formData) => {
     const token = localStorage.getItem('token')
-    const response = await fetch(`${API_BASE_URL}/tickets`, {
+    const response = await fetch(`${API_BASE_URL}/tickets/`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
+        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
       },
       body: formData,
     })
@@ -277,6 +278,17 @@ export const adminAPI = {
     return apiCall('/admin/logo', {
       method: 'POST',
       body: JSON.stringify({ logo, filename, showOnLogin, loginTitle }),
+    })
+  },
+  
+  // Ticket Settings
+  getTicketSettings: async () => {
+    return apiCall('/admin/ticket-settings')
+  },
+  updateTicketSettings: async (settings) => {
+    return apiCall('/admin/ticket-settings', {
+      method: 'POST',
+      body: JSON.stringify(settings),
     })
   },
   
@@ -581,10 +593,10 @@ export const apiKeysAPI = {
   getAll: async (organization = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
-    return apiCall(`/api-keys?${params.toString()}`)
+    return apiCall(`/api-keys/?${params.toString()}`)
   },
   create: async (apiKeyData) => {
-    return apiCall('/api-keys', {
+    return apiCall('/api-keys/', {
       method: 'POST',
       body: JSON.stringify(apiKeyData),
     })

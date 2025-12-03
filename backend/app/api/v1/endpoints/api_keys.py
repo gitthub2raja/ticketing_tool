@@ -12,7 +12,7 @@ import secrets
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/", response_model=List[dict])
 async def get_api_keys(
     organization: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_admin)

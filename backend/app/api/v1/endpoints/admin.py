@@ -148,6 +148,37 @@ async def update_logo(logo_data: dict, current_user: dict = Depends(get_current_
     return {"message": "Logo updated successfully"}
 
 
+@router.get("/ticket-settings")
+async def get_ticket_settings(current_user: dict = Depends(get_current_admin)):
+    """Get ticket settings (admin only)"""
+    db = await get_database()
+    
+    settings = await db.ticket_settings.find_one({})
+    
+    if not settings:
+        return {
+            "manualTicketId": False  # Default to auto-generated
+        }
+    
+    settings["id"] = str(settings["_id"])
+    del settings["_id"]
+    return settings
+
+
+@router.post("/ticket-settings")
+async def update_ticket_settings(settings_data: dict, current_user: dict = Depends(get_current_admin)):
+    """Update ticket settings (admin only)"""
+    db = await get_database()
+    
+    await db.ticket_settings.update_one(
+        {},
+        {"$set": settings_data},
+        upsert=True
+    )
+    
+    return {"message": "Ticket settings updated successfully"}
+
+
 @router.get("/roles")
 async def get_roles(current_user: dict = Depends(get_current_admin)):
     """Get all roles (admin only)"""

@@ -7,7 +7,8 @@ import { Select } from '../components/ui/Select'
 import { Badge } from '../components/ui/Badge'
 import { useAuth } from '../contexts/AuthContext'
 import { useSound } from '../utils/soundEffects'
-import { Settings as SettingsIcon, Bell, Globe, Moon, Sun, Volume2, VolumeX } from 'lucide-react'
+import { adminAPI } from '../services/api'
+import { Settings as SettingsIcon, Bell, Globe, Moon, Sun, Volume2, VolumeX, Ticket } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export const Settings = () => {
@@ -24,7 +25,40 @@ export const Settings = () => {
     timezone: 'UTC',
     theme: 'light',
   })
+  const [ticketSettings, setTicketSettings] = useState({
+    manualTicketId: false
+  })
   const [loading, setLoading] = useState(false)
+  const isAdmin = user?.role === 'admin'
+
+  useEffect(() => {
+    if (isAdmin) {
+      loadTicketSettings()
+    }
+  }, [isAdmin])
+
+  const loadTicketSettings = async () => {
+    try {
+      const settings = await adminAPI.getTicketSettings()
+      setTicketSettings(settings)
+    } catch (error) {
+      console.error('Failed to load ticket settings:', error)
+    }
+  }
+
+  const handleTicketSettingsChange = async (key, value) => {
+    const newSettings = { ...ticketSettings, [key]: value }
+    setTicketSettings(newSettings)
+    try {
+      await adminAPI.updateTicketSettings(newSettings)
+      toast.success('Ticket settings updated successfully!')
+    } catch (error) {
+      console.error('Failed to update ticket settings:', error)
+      toast.error('Failed to update ticket settings')
+      // Revert on error
+      loadTicketSettings()
+    }
+  }
 
   const handleNotificationChange = (key) => {
     setNotifications({ ...notifications, [key]: !notifications[key] })
@@ -218,6 +252,32 @@ export const Settings = () => {
             </div>
           </div>
         </Card>
+
+        {/* Ticket Settings - Admin Only */}
+        {isAdmin && (
+          <Card title="Ticket Settings">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Ticket className="text-primary-600" size={20} />
+                  <div>
+                    <h3 className="font-medium text-gray-900">Manual Ticket ID</h3>
+                    <p className="text-sm text-gray-600">Allow users to set custom ticket IDs when creating tickets</p>
+                  </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={ticketSettings.manualTicketId}
+                    onChange={(e) => handleTicketSettingsChange('manualTicketId', e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                </label>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Account Info */}
         <Card title="Account Information">
