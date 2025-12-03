@@ -86,11 +86,76 @@ async def test_smtp(test_data: dict, current_user: dict = Depends(get_current_ad
                     server.starttls()
             
             server.login(username, password)
+            
+            # Send test email if 'to' is provided
+            test_to = test_data.get("to")
+            if test_to:
+                from_email = smtp_config.get("fromEmail") or username
+                from_name = smtp_config.get("fromName", "Ticketing Tool")
+                
+                msg = MIMEMultipart()
+                msg["From"] = f"{from_name} <{from_email}>"
+                msg["To"] = test_to
+                msg["Subject"] = "Test Email from Ticketing Tool"
+                
+                # Get current time - use server's local time for better readability
+                # The email Date header will be set automatically by the email client
+                current_time = datetime.now()
+                # Format in a more readable way
+                time_str = current_time.strftime('%B %d, %Y at %I:%M:%S %p')
+                
+                body = f"""
+This is a test email from your Ticketing Tool.
+
+If you received this email, your SMTP configuration is working correctly!
+
+Configuration Details:
+- Host: {host}
+- Port: {port}
+- Encryption: {encryption}
+- From: {from_email}
+
+Sent: {time_str}
+"""
+                msg.attach(MIMEText(body, "plain"))
+                
+                # Send the email
+                try:
+                    server.send_message(msg)
+                    print(f"INFO: Test email sent successfully from {from_email} to {test_to}")
+                except Exception as send_error:
+                    server.quit()
+                    raise HTTPException(
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Failed to send test email: {str(send_error)}. Please check your email settings and ensure you're using an App Password for Gmail."
+                    )
+            
             server.quit()
             
-            return {"message": "SMTP connection successful"}
+            if test_to:
+                return {
+                    "message": f"Test email sent successfully to {test_to}! Please check your inbox (and spam folder).",
+                    "sent": True
+                }
+            else:
+                return {"message": "SMTP connection successful"}
             
+    except HTTPException:
+        raise
+    except smtplib.SMTPAuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"SMTP authentication failed: {str(e)}. For Gmail, make sure you're using an App Password instead of your regular password. Enable 2-Step Verification and generate an App Password from your Google Account settings."
+        )
+    except smtplib.SMTPException as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"SMTP error: {str(e)}"
+        )
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"ERROR: SMTP test failed: {str(e)}\n{error_trace}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"SMTP test failed: {str(e)}"

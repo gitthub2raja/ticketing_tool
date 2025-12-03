@@ -79,16 +79,27 @@ export const SLAPolicies = () => {
       setEditingPolicy(policy)
       const responseTime = hoursToHoursMinutes(policy.responseTime)
       const resolutionTime = hoursToHoursMinutes(policy.resolutionTime)
+      
+      // Handle organization - could be string ID or object
+      let orgId = ''
+      if (policy.organization) {
+        if (typeof policy.organization === 'object') {
+          orgId = policy.organization._id || policy.organization.id || ''
+        } else {
+          orgId = policy.organization
+        }
+      }
+      
       setFormData({
         name: policy.name || '',
-        organization: policy.organization?._id || policy.organization || '',
+        organization: orgId,
         priority: policy.priority || '',
         responseTimeHours: responseTime.hours,
         responseTimeMinutes: responseTime.minutes,
         resolutionTimeHours: resolutionTime.hours,
         resolutionTimeMinutes: resolutionTime.minutes,
         description: policy.description || '',
-        isActive: policy.isActive !== undefined ? policy.isActive : true,
+        isActive: policy.isActive !== undefined ? policy.isActive : (policy.is_active !== undefined ? policy.is_active : true),
       })
     } else {
       setEditingPolicy(null)
@@ -152,26 +163,38 @@ export const SLAPolicies = () => {
       delete submitData.resolutionTimeMinutes
 
       if (editingPolicy) {
-        await adminAPI.updateSLAPolicy(editingPolicy._id, submitData)
+        const policyId = editingPolicy._id || editingPolicy.id
+        if (!policyId) {
+          toast.error('Invalid policy ID')
+          return
+        }
+        await adminAPI.updateSLAPolicy(policyId, submitData)
         toast.success('SLA Policy updated successfully!')
       } else {
         await adminAPI.createSLAPolicy(submitData)
         toast.success('SLA Policy created successfully!')
       }
       handleCloseModal()
-      loadPolicies()
+      await loadPolicies()
     } catch (error) {
+      console.error('Failed to save SLA Policy:', error)
       toast.error(error.message || 'Failed to save SLA Policy')
     }
   }
 
   const handleDelete = async (policyId) => {
-    if (window.confirm('Are you sure you want to delete this SLA Policy?')) {
+    if (!policyId) {
+      toast.error('Invalid policy ID')
+      return
+    }
+    
+    if (window.confirm('Are you sure you want to delete this SLA Policy? This action cannot be undone.')) {
       try {
         await adminAPI.deleteSLAPolicy(policyId)
         toast.success('SLA Policy deleted successfully!')
-        loadPolicies()
+        await loadPolicies()
       } catch (error) {
+        console.error('Failed to delete SLA Policy:', error)
         toast.error(error.message || 'Failed to delete SLA Policy')
       }
     }
@@ -254,9 +277,11 @@ export const SLAPolicies = () => {
               <p className="text-sm text-gray-500">Create your first SLA policy to get started</p>
             </div>
           ) : (
-            policies.map((policy) => (
+            policies.map((policy) => {
+              const policyId = policy._id || policy.id
+              return (
               <Card 
-                key={policy._id} 
+                key={policyId} 
                 className="p-6 border-l-4 border-primary-500 hover:shadow-lg transition-all duration-300"
               >
                 <div className="flex items-start justify-between mb-4">
@@ -277,13 +302,17 @@ export const SLAPolicies = () => {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleOpenModal(policy)}
-                      className="text-primary-600 hover:text-primary-700 transition-colors p-1"
+                      className="text-primary-600 hover:text-primary-700 transition-colors p-1 rounded hover:bg-primary-50"
+                      title="Edit SLA Policy"
+                      type="button"
                     >
                       <Edit size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(policy._id)}
-                      className="text-red-600 hover:text-red-700 transition-colors p-1"
+                      onClick={() => handleDelete(policyId)}
+                      className="text-red-600 hover:text-red-700 transition-colors p-1 rounded hover:bg-red-50"
+                      title="Delete SLA Policy"
+                      type="button"
                     >
                       <Trash2 size={18} />
                     </button>
@@ -305,13 +334,14 @@ export const SLAPolicies = () => {
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-gray-600">Status:</span>
-                    <Badge variant={policy.isActive ? 'success' : 'warning'}>
-                      {policy.isActive ? 'Active' : 'Inactive'}
+                    <Badge variant={(policy.isActive !== undefined ? policy.isActive : policy.is_active !== undefined ? policy.is_active : true) ? 'success' : 'warning'}>
+                      {(policy.isActive !== undefined ? policy.isActive : policy.is_active !== undefined ? policy.is_active : true) ? 'Active' : 'Inactive'}
                     </Badge>
                   </div>
                 </div>
               </Card>
-            ))
+              )
+            })
           )}
         </div>
 

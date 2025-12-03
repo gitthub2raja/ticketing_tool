@@ -29,3 +29,6 @@ class CategoryResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+
+
+

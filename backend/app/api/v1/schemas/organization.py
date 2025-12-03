@@ -27,3 +27,6 @@ class OrganizationResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+
+
+

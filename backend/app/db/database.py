@@ -27,3 +27,6 @@ async def close_db():
     if client:
         client.close()
 
+
+
+

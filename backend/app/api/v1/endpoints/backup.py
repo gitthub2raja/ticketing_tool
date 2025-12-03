@@ -65,10 +65,30 @@ async def list_backups(current_user: dict = Depends(get_current_admin)):
     
     for file in BACKUP_DIR.glob("backup_*.json"):
         stat = file.stat()
+        created_at = datetime.fromtimestamp(stat.st_mtime)
+        
+        # Try to read backup file to get metadata
+        collections = []
+        collection_counts = {}
+        try:
+            with open(file, "r") as f:
+                backup_data = json.load(f)
+                if "collections" in backup_data:
+                    collections = list(backup_data["collections"].keys())
+                    collection_counts = {
+                        name: len(docs) if isinstance(docs, list) else 0
+                        for name, docs in backup_data["collections"].items()
+                    }
+        except:
+            pass
+        
         backups.append({
             "name": file.name,
             "size": stat.st_size,
-            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+            "created_at": created_at.isoformat(),
+            "timestamp": created_at.isoformat(),  # Also include timestamp for frontend compatibility
+            "collections": collections,
+            "collectionCounts": collection_counts
         })
     
     return sorted(backups, key=lambda x: x["created_at"], reverse=True)

@@ -10,6 +10,8 @@ from app.api.v1.schemas.auth import (
 from app.core.security import verify_password, create_access_token, get_password_hash
 from app.db.database import get_database
 from app.middleware.auth import get_current_user
+from app.services.email_service import send_welcome_email
+from app.core.config import settings
 from datetime import timedelta
 from bson import ObjectId
 import pyotp
@@ -124,6 +126,20 @@ async def register(request: RegisterRequest):
     )
     
     user_data["id"] = str(result.inserted_id)
+    
+    # Send welcome email notification (non-blocking)
+    try:
+        login_url = f"{settings.FRONTEND_URL}/login"
+        await send_welcome_email(
+            user_email=user_data["email"],
+            user_name=user_data["name"],
+            password=None,  # User set their own password during registration
+            login_url=login_url
+        )
+    except Exception as e:
+        # Log error but don't fail registration if email fails
+        print(f"WARNING: Failed to send welcome email to {user_data['email']}: {str(e)}")
+    
     del user_data["password"]
     del user_data["_id"]
     

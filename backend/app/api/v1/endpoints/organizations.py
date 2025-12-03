@@ -17,17 +17,26 @@ router = APIRouter()
 @router.get("/", response_model=List[OrganizationResponse])
 async def get_organizations(current_user: dict = Depends(get_current_admin)):
     """Get all organizations (admin only)"""
-    db = await get_database()
-    cursor = db.organizations.find({"is_active": True})
-    organizations = await cursor.to_list(length=100)
-    
-    result = []
-    for org in organizations:
-        org["id"] = str(org["_id"])
-        del org["_id"]
-        result.append(org)
-    
-    return result
+    try:
+        db = await get_database()
+        cursor = db.organizations.find({"is_active": True})
+        organizations = await cursor.to_list(length=100)
+        
+        result = []
+        for org in organizations:
+            org["id"] = str(org["_id"])
+            del org["_id"]
+            result.append(org)
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to get organizations: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve organizations"
+        )
 
 
 @router.get("/{org_id}", response_model=OrganizationResponse)

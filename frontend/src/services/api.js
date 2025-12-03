@@ -1,5 +1,22 @@
 // API service for all backend calls
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+// In development, use the proxy or direct backend URL
+// In production, use relative /api which should be proxied by nginx
+const getApiBaseUrl = () => {
+  // Check if VITE_API_URL is set in environment
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL
+  }
+  
+  // In development, try to use the backend directly if we're on localhost
+  if (import.meta.env.DEV && window.location.hostname === 'localhost') {
+    return 'http://localhost:5000/api'
+  }
+  
+  // Default to relative path (works with vite proxy or nginx)
+  return '/api'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // Helper function to get auth token
 const getAuthToken = () => {
@@ -19,7 +36,8 @@ const apiCall = async (endpoint, options = {}) => {
   }
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const url = `${API_BASE_URL}${endpoint}`
+    const response = await fetch(url, {
       ...options,
       headers,
     })
@@ -39,13 +57,13 @@ const apiCall = async (endpoint, options = {}) => {
       }
       
       const error = await response.json().catch(() => ({ message: 'An error occurred' }))
-      throw new Error(error.message || 'Request failed')
+      throw new Error(error.message || error.detail || 'Request failed')
     }
 
     return response.json()
   } catch (error) {
     // Handle network errors (fetch failures)
-    if (error instanceof TypeError && error.message.includes('fetch')) {
+    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
       throw new Error('Network error: Unable to connect to server. Please check your connection and try again.')
     }
     // Re-throw other errors

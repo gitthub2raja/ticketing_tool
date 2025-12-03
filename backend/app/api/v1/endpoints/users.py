@@ -6,6 +6,8 @@ from typing import List, Optional
 from app.middleware.auth import get_current_user, get_current_admin
 from app.db.database import get_database
 from app.core.security import get_password_hash
+from app.services.email_service import send_welcome_email
+from app.core.config import settings
 from bson import ObjectId
 
 router = APIRouter()
@@ -17,27 +19,43 @@ async def get_users(
     current_user: dict = Depends(get_current_admin)
 ):
     """Get all users (admin only)"""
-    db = await get_database()
-    query = {}
-    
-    if organization:
-        query["organization"] = ObjectId(organization)
-    
-    cursor = db.users.find(query)
-    users = await cursor.to_list(length=100)
-    
-    result = []
-    for user in users:
-        user["id"] = str(user["_id"])
-        if user.get("organization"):
-            user["organization"] = str(user["organization"])
-        if user.get("department"):
-            user["department"] = str(user["department"])
-        del user["_id"]
-        del user["password"]
-        result.append(user)
-    
-    return result
+    try:
+        db = await get_database()
+        query = {}
+        
+        if organization:
+            try:
+                query["organization"] = ObjectId(organization)
+            except:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid organization ID"
+                )
+        
+        cursor = db.users.find(query)
+        users = await cursor.to_list(length=100)
+        
+        result = []
+        for user in users:
+            user["id"] = str(user["_id"])
+            if user.get("organization"):
+                user["organization"] = str(user["organization"])
+            if user.get("department"):
+                user["department"] = str(user["department"])
+            del user["_id"]
+            # Safely remove password if it exists
+            user.pop("password", None)
+            result.append(user)
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Failed to get users: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve users"
+        )
 
 
 @router.get("/mentions")
@@ -136,9 +154,41 @@ async def create_user(
     
     result = await db.users.insert_one(new_user)
     
+    # Store password temporarily for email (before deleting it)
+    temp_password = user_data.get("password", "password123")
+    
+    # Convert ObjectId fields to strings for JSON serialization
     new_user["id"] = str(result.inserted_id)
+    if new_user.get("organization"):
+        new_user["organization"] = str(new_user["organization"])
+    if new_user.get("department"):
+        new_user["department"] = str(new_user["department"])
+    
+    # Remove sensitive/internal fields
     del new_user["password"]
-    del new_user["_id"]
+    if "_id" in new_user:
+        del new_user["_id"]
+    
+    # Send welcome email notification if requested (non-blocking)
+    send_welcome_email_flag = user_data.get("sendWelcomeEmail", True)  # Default to True if not specified
+    if send_welcome_email_flag:
+        try:
+            login_url = f"{settings.FRONTEND_URL}/login"
+            email_sent = await send_welcome_email(
+                user_email=new_user["email"],
+                user_name=new_user["name"],
+                password=temp_password if user_data.get("password") else None,
+                login_url=login_url
+            )
+            if email_sent:
+                print(f"INFO: Welcome email sent successfully to {new_user['email']}")
+            else:
+                print(f"WARNING: Welcome email could not be sent to {new_user['email']} (email settings may not be configured)")
+        except Exception as e:
+            # Log error but don't fail user creation if email fails
+            print(f"WARNING: Failed to send welcome email to {new_user['email']}: {str(e)}")
+    else:
+        print(f"INFO: Welcome email skipped for {new_user['email']} (sendWelcomeEmail=false)")
     
     return new_user
 

@@ -186,3 +186,6 @@ class EmailOAuth2Service:
                 "token_expiry": (datetime.utcnow() + timedelta(seconds=token_data.get("expires_in", 3600))).isoformat()
             }
 
+
+
+

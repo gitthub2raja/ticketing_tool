@@ -49,6 +49,7 @@ export const EmailSettings = () => {
   const [testingSMTP, setTestingSMTP] = useState(false)
   const [testingIMAP, setTestingIMAP] = useState(false)
   const [authorizingOAuth2, setAuthorizingOAuth2] = useState({ smtp: false, imap: false })
+  const [settingsSaved, setSettingsSaved] = useState({ smtp: false, imap: false })
 
   useEffect(() => {
     loadSettings()
@@ -83,6 +84,7 @@ export const EmailSettings = () => {
           oauth2TenantId: oauth2.tenantId || '',
           oauth2Authorized: !!(oauth2.accessToken && oauth2.refreshToken),
         })
+        setSettingsSaved(prev => ({ ...prev, smtp: true }))
       }
 
       if (settings.imap) {
@@ -109,6 +111,7 @@ export const EmailSettings = () => {
           oauth2TenantId: oauth2.tenantId || '',
           oauth2Authorized: !!(oauth2.accessToken && oauth2.refreshToken),
         })
+        setSettingsSaved(prev => ({ ...prev, imap: true }))
       }
     } catch (error) {
       console.error('Failed to load email settings:', error)
@@ -142,6 +145,7 @@ export const EmailSettings = () => {
       
       await adminAPI.updateEmailSettings({ smtp: smtpData })
       toast.success('SMTP settings saved successfully!')
+      setSettingsSaved(prev => ({ ...prev, smtp: true }))
       await loadSettings() // Reload to get updated OAuth2 status
     } catch (error) {
       toast.error(error.message || 'Failed to save SMTP settings')
@@ -176,6 +180,7 @@ export const EmailSettings = () => {
       
       await adminAPI.updateEmailSettings({ imap: imapData })
       toast.success('IMAP settings saved successfully!')
+      setSettingsSaved(prev => ({ ...prev, imap: true }))
       await loadSettings() // Reload to get updated OAuth2 status
     } catch (error) {
       toast.error(error.message || 'Failed to save IMAP settings')
@@ -220,11 +225,47 @@ export const EmailSettings = () => {
       return
     }
 
+    // Check if SMTP settings are saved first
+    if (!smtpSettings.host || !smtpSettings.port) {
+      toast.error('Please configure SMTP Host and Port before testing')
+      return
+    }
+
     if (smtpSettings.authMethod === 'password') {
-      if (!smtpSettings.host || !smtpSettings.username || !smtpSettings.password) {
-        toast.error('Please fill in all required SMTP fields before testing')
+      // If settings are already saved, backend will use saved password
+      // Only require password if settings haven't been saved yet
+      if (!settingsSaved.smtp) {
+        if (!smtpSettings.username || !smtpSettings.password) {
+          toast.error('Please fill in Username and Password, then save settings before testing')
+          return
+        }
+        // Save settings first if not saved
+        try {
+          const smtpData = {
+            enabled: true,
+            host: smtpSettings.host,
+            port: parseInt(smtpSettings.port),
+            encryption: smtpSettings.encryption,
+            authMethod: 'password',
+            auth: {
+              user: smtpSettings.username,
+              pass: smtpSettings.password,
+            },
+            fromEmail: smtpSettings.fromEmail,
+            fromName: smtpSettings.fromName,
+          }
+          await adminAPI.updateEmailSettings({ smtp: smtpData })
+          setSettingsSaved(prev => ({ ...prev, smtp: true }))
+          toast.success('Settings saved. Testing connection...')
+        } catch (error) {
+          toast.error('Failed to save SMTP settings: ' + (error.message || 'Unknown error'))
+          return
+        }
+      } else if (!smtpSettings.username) {
+        toast.error('Please fill in Username before testing')
         return
       }
+      // If settings are saved, backend will use saved password from database
     } else {
       if (!smtpSettings.oauth2Authorized) {
         toast.error('Please authorize OAuth2 first before testing')
@@ -234,8 +275,8 @@ export const EmailSettings = () => {
 
     setTestingSMTP(true)
     try {
-      await emailAPI.testSMTP({})
-      toast.success('Test email sent successfully! Please check your inbox.')
+      const result = await emailAPI.testSMTP({ to: testEmail })
+      toast.success(result.message || 'Test email sent successfully! Please check your inbox (and spam folder).')
     } catch (error) {
       toast.error(error.message || 'Failed to send test email')
     } finally {
@@ -244,11 +285,45 @@ export const EmailSettings = () => {
   }
 
   const handleTestIMAP = async () => {
+    if (!imapSettings.host || !imapSettings.port) {
+      toast.error('Please configure IMAP Host and Port before testing')
+      return
+    }
+
     if (imapSettings.authMethod === 'password') {
-      if (!imapSettings.host || !imapSettings.username || !imapSettings.password) {
-        toast.error('Please fill in all required IMAP fields before testing')
+      // If settings are already saved, backend will use saved password
+      // Only require password if settings haven't been saved yet
+      if (!settingsSaved.imap) {
+        if (!imapSettings.username || !imapSettings.password) {
+          toast.error('Please fill in Username and Password, then save settings before testing')
+          return
+        }
+        // Save settings first if not saved
+        try {
+          const imapData = {
+            enabled: true,
+            host: imapSettings.host,
+            port: parseInt(imapSettings.port),
+            encryption: imapSettings.encryption,
+            authMethod: 'password',
+            auth: {
+              user: imapSettings.username,
+              pass: imapSettings.password,
+            },
+            folder: imapSettings.folder || 'INBOX',
+          }
+          await adminAPI.updateEmailSettings({ imap: imapData })
+          setSettingsSaved(prev => ({ ...prev, imap: true }))
+          toast.success('Settings saved. Testing connection...')
+        } catch (error) {
+          toast.error('Failed to save IMAP settings: ' + (error.message || 'Unknown error'))
+          return
+        }
+      } else if (!imapSettings.username) {
+        toast.error('Please fill in Username before testing')
         return
       }
+      // If settings are saved, backend will use saved password from database
     } else {
       if (!imapSettings.oauth2Authorized) {
         toast.error('Please authorize OAuth2 first before testing')
@@ -343,6 +418,17 @@ export const EmailSettings = () => {
                     placeholder={smtpSettings.host?.includes('office365.com') ? 'Use App Password for Office365' : ''}
                   />
                 </div>
+                {(smtpSettings.host?.includes('gmail.com') || smtpSettings.username?.includes('@gmail.com')) && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    <p className="font-medium mb-1">⚠️ Gmail requires App Password:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs">
+                      <li>Enable 2-Step Verification in your Google Account</li>
+                      <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline">Google App Passwords</a></li>
+                      <li>Generate an App Password for "Mail"</li>
+                      <li>Use the 16-character App Password (not your regular password)</li>
+                    </ol>
+                  </div>
+                )}
               </>
             ) : (
               <>

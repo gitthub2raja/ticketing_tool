@@ -20,6 +20,7 @@ export const Users = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -28,6 +29,7 @@ export const Users = () => {
     status: 'active',
     organization: '',
     department: '',
+    sendWelcomeEmail: true, // Default to true for new users
   })
 
   useEffect(() => {
@@ -64,6 +66,7 @@ export const Users = () => {
       setOrganizations(data)
     } catch (error) {
       console.error('Failed to load organizations', error)
+      toast.error('Failed to load organizations')
     }
   }
 
@@ -77,6 +80,7 @@ export const Users = () => {
       setDepartments(filtered)
     } catch (error) {
       console.error('Failed to load departments', error)
+      // Don't show toast for departments as it's called frequently
     }
   }
 
@@ -96,6 +100,7 @@ export const Users = () => {
         status: user.status,
         organization: user.organization?._id || user.organization || '',
         department: user.department?._id || user.department || '',
+        sendWelcomeEmail: false, // Don't send welcome email when editing
       })
       // Load departments for this user's organization
       if (user.organization?._id || user.organization) {
@@ -103,7 +108,16 @@ export const Users = () => {
       }
     } else {
       setEditingUser(null)
-      setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
+      setFormData({ 
+        name: '', 
+        email: '', 
+        password: '', 
+        role: '', 
+        status: 'active', 
+        organization: '', 
+        department: '',
+        sendWelcomeEmail: true, // Send welcome email for new users by default
+      })
     }
     setIsModalOpen(true)
   }
@@ -111,12 +125,29 @@ export const Users = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingUser(null)
-    setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
+    setFormData({ 
+      name: '', 
+      email: '', 
+      password: '', 
+      role: '', 
+      status: 'active', 
+      organization: '', 
+      department: '',
+      sendWelcomeEmail: true,
+    })
     setDepartments([])
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    
+    // Prevent duplicate submissions
+    if (isSubmitting) {
+      return
+    }
+    
+    setIsSubmitting(true)
+    
     try {
       // Prepare data - only include password if provided
       const submitData = { ...formData }
@@ -128,23 +159,45 @@ export const Users = () => {
       if (editingUser) {
         await usersAPI.update(editingUser._id || editingUser.id, submitData)
         toast.success('User updated successfully!')
+        handleCloseModal()
+        await loadUsers()
       } else {
         // Password and organization are required for new users
         if (!submitData.password) {
           toast.error('Password is required for new users')
+          setIsSubmitting(false)
           return
         }
         if (!submitData.organization) {
           toast.error('Organization is required for new users')
+          setIsSubmitting(false)
           return
         }
-        await usersAPI.create(submitData)
-        toast.success('User created successfully!')
+        
+        // Include sendWelcomeEmail flag for new users
+        const createData = { 
+          ...submitData, 
+          sendWelcomeEmail: formData.sendWelcomeEmail !== false 
+        }
+        
+        await usersAPI.create(createData)
+        
+        if (formData.sendWelcomeEmail !== false) {
+          toast.success('User created successfully! Welcome email sent.')
+        } else {
+          toast.success('User created successfully!')
+        }
+        
+        handleCloseModal()
+        await loadUsers()
       }
-      handleCloseModal()
-      loadUsers()
     } catch (error) {
-      toast.error(error.message || 'Failed to save user')
+      console.error('User creation/update error:', error)
+      // Show error message only once
+      const errorMessage = error.message || error.detail || 'Failed to save user'
+      toast.error(errorMessage)
+    } finally {
+      setIsSubmitting(false)
     }
   }
 
@@ -413,8 +466,29 @@ export const Users = () => {
           title={editingUser ? 'Edit User' : 'Add New User'}
           footer={
             <>
-              <Button variant="outline" transparent onClick={handleCloseModal}>Cancel</Button>
-              <Button transparent onClick={handleSubmit}>Save</Button>
+              <Button 
+                variant="outline" 
+                transparent 
+                onClick={handleCloseModal}
+                disabled={isSubmitting}
+                type="button"
+              >
+                Cancel
+              </Button>
+              <Button 
+                transparent 
+                onClick={handleSubmit} 
+                type="submit"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  'Processing...'
+                ) : editingUser ? (
+                  'Save Changes'
+                ) : (
+                  'Create User'
+                )}
+              </Button>
             </>
           }
         >
@@ -476,6 +550,20 @@ export const Users = () => {
               ]}
               required
             />
+            {!editingUser && (
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="sendWelcomeEmail"
+                  checked={formData.sendWelcomeEmail !== false}
+                  onChange={(e) => setFormData({ ...formData, sendWelcomeEmail: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="sendWelcomeEmail" className="ml-2 text-sm text-gray-700">
+                  Send welcome email notification to user
+                </label>
+              </div>
+            )}
             <Select
               label="Status"
               value={formData.status}

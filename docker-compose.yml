@@ -15,6 +15,7 @@ services:
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
+      - ./backups/mongodb:/backups
     networks:
       - ticketing_network
     healthcheck:
@@ -39,6 +40,7 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-this-jwt-secret-in-production}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost}
       - ENVIRONMENT=production
+      - TZ=Asia/Kolkata
     volumes:
       - ./backend/uploads:/app/uploads
     depends_on:
@@ -59,7 +61,7 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        - VITE_API_URL=/api
+        - VITE_API_URL=${VITE_API_URL:-/api}
     container_name: ticketing_frontend
     restart: unless-stopped
     networks:

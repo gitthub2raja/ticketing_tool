@@ -32,3 +32,6 @@ class DepartmentResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
+
+
+

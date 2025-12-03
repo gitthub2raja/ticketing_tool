@@ -1,16 +1,21 @@
 """
 Authentication middleware
 """
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, HTTPException, status, Header
+from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import decode_access_token
 from app.db.database import get_database
 from bson import ObjectId
+from typing import Optional
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+http_bearer = HTTPBearer(auto_error=False)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    authorization: Optional[str] = Header(None)
+):
     """Get current authenticated user"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -18,25 +23,53 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    payload = decode_access_token(token)
-    if payload is None:
+    # Try to get token from OAuth2 scheme first, then from Authorization header
+    if not token and authorization:
+        # Extract token from "Bearer <token>" format
+        if authorization.startswith("Bearer "):
+            token = authorization[7:]
+        else:
+            token = authorization
+    
+    if not token:
         raise credentials_exception
     
-    user_id: str = payload.get("sub")
-    if user_id is None:
+    try:
+        payload = decode_access_token(token)
+        if payload is None:
+            raise credentials_exception
+        
+        user_id: str = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+        
+        db = await get_database()
+        try:
+            user = await db.users.find_one({"_id": ObjectId(user_id)})
+        except:
+            raise credentials_exception
+        
+        if user is None:
+            raise credentials_exception
+        
+        # Check if user is active
+        if not user.get("is_active", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is disabled"
+            )
+        
+        user["id"] = str(user["_id"])
+        del user["_id"]
+        # Safely remove password if it exists
+        user.pop("password", None)
+        
+        return user
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"ERROR: Authentication failed: {str(e)}")
         raise credentials_exception
-    
-    db = await get_database()
-    user = await db.users.find_one({"_id": ObjectId(user_id)})
-    
-    if user is None:
-        raise credentials_exception
-    
-    user["id"] = str(user["_id"])
-    del user["_id"]
-    del user["password"]
-    
-    return user
 
 
 async def get_current_admin(current_user: dict = Depends(get_current_user)):

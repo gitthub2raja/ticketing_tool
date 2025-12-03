@@ -221,8 +221,30 @@ async def get_sla_policies(
     result = []
     for policy in policies:
         policy["id"] = str(policy["_id"])
+        # Handle organization - convert ObjectId to object with name if possible
         if policy.get("organization"):
-            policy["organization"] = str(policy["organization"])
+            if isinstance(policy["organization"], ObjectId):
+                # Try to get organization name
+                org = await db.organizations.find_one({"_id": policy["organization"]})
+                if org:
+                    policy["organization"] = {"_id": str(policy["organization"]), "id": str(policy["organization"]), "name": org.get("name", "Unknown")}
+                else:
+                    policy["organization"] = {"_id": str(policy["organization"]), "id": str(policy["organization"]), "name": "Unknown"}
+            elif isinstance(policy["organization"], str):
+                # Already a string, try to get org details
+                try:
+                    org = await db.organizations.find_one({"_id": ObjectId(policy["organization"])})
+                    if org:
+                        policy["organization"] = {"_id": policy["organization"], "id": policy["organization"], "name": org.get("name", "Unknown")}
+                except:
+                    pass
+        
+        # Map snake_case to camelCase for frontend
+        if "is_active" in policy:
+            policy["isActive"] = policy["is_active"]
+        elif "isActive" not in policy:
+            policy["isActive"] = policy.get("is_active", True)
+        
         del policy["_id"]
         result.append(policy)
     
@@ -234,13 +256,36 @@ async def create_sla_policy(policy_data: dict, current_user: dict = Depends(get_
     """Create SLA policy (admin only)"""
     db = await get_database()
     
+    # Handle organization field
     if policy_data.get("organization"):
-        policy_data["organization"] = ObjectId(policy_data["organization"])
+        if policy_data["organization"]:  # Not empty string
+            policy_data["organization"] = ObjectId(policy_data["organization"])
+        else:
+            # Empty string means global policy
+            policy_data["organization"] = None
+    else:
+        # No organization field means global policy
+        policy_data["organization"] = None
+    
+    # Handle isActive field (map camelCase to snake_case)
+    if "isActive" in policy_data:
+        policy_data["is_active"] = policy_data["isActive"]
+        del policy_data["isActive"]
     
     result = await db.sla_policies.insert_one(policy_data)
     policy_data["id"] = str(result.inserted_id)
+    
+    # Handle organization in response - convert to object with name
     if policy_data.get("organization"):
-        policy_data["organization"] = str(policy_data["organization"])
+        if isinstance(policy_data["organization"], ObjectId):
+            org = await db.organizations.find_one({"_id": policy_data["organization"]})
+            if org:
+                policy_data["organization"] = {"_id": str(policy_data["organization"]), "id": str(policy_data["organization"]), "name": org.get("name", "Unknown")}
+    
+    # Map snake_case to camelCase for frontend
+    if "is_active" in policy_data:
+        policy_data["isActive"] = policy_data["is_active"]
+    
     del policy_data["_id"]
     
     return policy_data
@@ -251,21 +296,70 @@ async def update_sla_policy(policy_id: str, policy_data: dict, current_user: dic
     """Update SLA policy (admin only)"""
     db = await get_database()
     
-    if policy_data.get("organization"):
-        policy_data["organization"] = ObjectId(policy_data["organization"])
-    
-    await db.sla_policies.update_one(
-        {"_id": ObjectId(policy_id)},
-        {"$set": policy_data}
-    )
-    
-    policy = await db.sla_policies.find_one({"_id": ObjectId(policy_id)})
-    policy["id"] = str(policy["_id"])
-    if policy.get("organization"):
-        policy["organization"] = str(policy["organization"])
-    del policy["_id"]
-    
-    return policy
+    try:
+        # Handle organization field
+        if policy_data.get("organization"):
+            if policy_data["organization"]:  # Not empty string
+                policy_data["organization"] = ObjectId(policy_data["organization"])
+            else:
+                # Empty string means global policy, remove organization field
+                policy_data["organization"] = None
+        elif "organization" in policy_data and policy_data["organization"] == "":
+            policy_data["organization"] = None
+        
+        # Handle isActive field (map camelCase to snake_case)
+        if "isActive" in policy_data:
+            policy_data["is_active"] = policy_data["isActive"]
+            del policy_data["isActive"]
+        
+        # Remove fields that shouldn't be updated directly
+        policy_data.pop("id", None)
+        policy_data.pop("_id", None)
+        
+        result = await db.sla_policies.update_one(
+            {"_id": ObjectId(policy_id)},
+            {"$set": policy_data}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SLA policy not found"
+            )
+        
+        # Fetch and return updated policy
+        policy = await db.sla_policies.find_one({"_id": ObjectId(policy_id)})
+        if not policy:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SLA policy not found"
+            )
+        
+        policy["id"] = str(policy["_id"])
+        
+        # Handle organization - convert to object with name
+        if policy.get("organization"):
+            if isinstance(policy["organization"], ObjectId):
+                org = await db.organizations.find_one({"_id": policy["organization"]})
+                if org:
+                    policy["organization"] = {"_id": str(policy["organization"]), "id": str(policy["organization"]), "name": org.get("name", "Unknown")}
+                else:
+                    policy["organization"] = {"_id": str(policy["organization"]), "id": str(policy["organization"]), "name": "Unknown"}
+        
+        # Map snake_case to camelCase
+        if "is_active" in policy:
+            policy["isActive"] = policy["is_active"]
+        
+        del policy["_id"]
+        
+        return policy
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to update SLA policy: {str(e)}"
+        )
 
 
 @router.delete("/sla/{policy_id}")
@@ -273,6 +367,19 @@ async def delete_sla_policy(policy_id: str, current_user: dict = Depends(get_cur
     """Delete SLA policy (admin only)"""
     db = await get_database()
     
-    await db.sla_policies.delete_one({"_id": ObjectId(policy_id)})
+    try:
+        result = await db.sla_policies.delete_one({"_id": ObjectId(policy_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SLA policy not found"
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to delete SLA policy: {str(e)}"
+        )
     
     return {"message": "SLA policy deleted successfully"}
