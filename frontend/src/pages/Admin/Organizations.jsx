@@ -44,11 +44,13 @@ export const Organizations = () => {
     try {
       if (org) {
         setEditingOrg(org)
+        // Convert is_active (boolean) to status (string) for display
+        const isActive = org.is_active !== undefined ? org.is_active : (org.isActive !== undefined ? org.isActive : true)
         setFormData({
           name: org.name || '',
           domain: org.domain || '',
           description: org.description || '',
-          status: org.status || 'active',
+          status: isActive ? 'active' : 'inactive',
         })
       } else {
         setEditingOrg(null)
@@ -80,6 +82,14 @@ export const Organizations = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      const submitData = { ...formData }
+      
+      // Convert status (string) to is_active (boolean) for backend
+      if (submitData.status !== undefined) {
+        submitData.is_active = submitData.status === 'active'
+        delete submitData.status
+      }
+      
       if (editingOrg) {
         const orgId = editingOrg._id || editingOrg.id
         if (!orgId) {
@@ -87,11 +97,11 @@ export const Organizations = () => {
           console.error('Editing org:', editingOrg)
           return
         }
-        console.log('Updating organization:', orgId, formData)
-        await organizationsAPI.update(orgId, formData)
+        console.log('Updating organization:', orgId, submitData)
+        await organizationsAPI.update(orgId, submitData)
         toast.success('Organization updated successfully!')
       } else {
-        await organizationsAPI.create(formData)
+        await organizationsAPI.create(submitData)
         toast.success('Organization created successfully!')
       }
       handleCloseModal()
@@ -167,8 +177,8 @@ export const Organizations = () => {
                           )}
                         </div>
                       </div>
-                      <Badge variant={org.status === 'active' ? 'success' : 'warning'}>
-                        {org.status}
+                      <Badge variant={(org.is_active !== undefined ? org.is_active : (org.isActive !== undefined ? org.isActive : true)) ? 'success' : 'warning'}>
+                        {(org.is_active !== undefined ? org.is_active : (org.isActive !== undefined ? org.isActive : true)) ? 'Active' : 'Inactive'}
                       </Badge>
                     </div>
 
@@ -240,53 +250,65 @@ export const Organizations = () => {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           title={editingOrg ? 'Edit Organization' : 'Add New Organization'}
+          size="lg"
+          footer={
+            <div className="flex space-x-3 w-full">
+              <Button variant="outline" onClick={handleCloseModal} className="flex-1">Cancel</Button>
+              <Button onClick={handleSubmit} className="flex-1">{editingOrg ? 'Update' : 'Create'} Organization</Button>
+            </div>
+          }
         >
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Organization Name *"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-            />
-            <Input
-              label="Domain (optional)"
-              value={formData.domain}
-              onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
-              placeholder="example.com"
-            />
-            <Input
-              label="Description"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Organization description"
-            />
-            <Select
-              label="Status"
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              options={[
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-              ]}
-              required
-            />
-            <div className="flex space-x-3 pt-4 border-t border-gray-200">
-              <Button
-                type="button"
-                variant="outline"
-                transparent
-                onClick={handleCloseModal}
-                className="flex-1"
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                transparent
-                className="flex-1"
-              >
-                {editingOrg ? 'Update' : 'Create'} Organization
-              </Button>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div className="grid grid-cols-1 gap-5">
+              <Input
+                label="Organization Name *"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+                placeholder="e.g., Acme Corporation"
+              />
+              
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="Domain (optional)"
+                  value={formData.domain}
+                  onChange={(e) => setFormData({ ...formData, domain: e.target.value })}
+                  placeholder="example.com"
+                />
+                
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    Status
+                  </label>
+                  <div className="flex items-center space-x-3 h-10">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formData.status === 'active'}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                      <span className="ml-3 text-sm font-medium text-gray-700">
+                        {formData.status === 'active' ? 'Active' : 'Inactive'}
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Description
+                </label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Organization description"
+                  rows={3}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+                />
+              </div>
             </div>
           </form>
         </Modal>

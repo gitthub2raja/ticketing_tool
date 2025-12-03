@@ -84,3 +84,4 @@ docker compose exec mongodb mongosh -u mongoadmin -p mongopassword --authenticat
 4. **Check backend logs** - Look for errors
 5. **Restart containers** - `docker compose restart backend mongodb`
 
+

@@ -15,6 +15,7 @@ from datetime import datetime
 import aiofiles
 import os
 from app.core.config import settings
+from app.services.email_service import send_ticket_status_notification
 
 router = APIRouter()
 
@@ -70,6 +71,10 @@ def normalize_ticket(ticket: dict) -> dict:
     if ticket.get("approved_by"):
         normalized["approvedBy"] = str(ticket["approved_by"])
     
+    # Handle solution field
+    if ticket.get("solution"):
+        normalized["solution"] = ticket["solution"]
+    
     # Remove _id and original snake_case fields (keep camelCase versions)
     for key in ["_id", "created_at", "updated_at", "due_date", "approved_at", "ticket_id", "approved_by"]:
         if key in normalized:
@@ -106,9 +111,19 @@ async def get_tickets(
     query = {}
     
     # Role-based filtering
-    if current_user.get("role") not in ["admin", "agent"]:
-        # Regular users only see their own tickets
-        query["creator"] = ObjectId(current_user["id"])
+    user_role = current_user.get("role")
+    if user_role not in ["admin", "agent"]:
+        if user_role == "department-head":
+            # Department heads see tickets from their department
+            user_dept = current_user.get("department")
+            if user_dept:
+                query["department"] = ObjectId(user_dept)
+            else:
+                # If no department assigned, return empty
+                return []
+        else:
+            # Regular users only see their own tickets
+            query["creator"] = ObjectId(current_user["id"])
     
     # Apply filters
     if status:
@@ -362,8 +377,13 @@ async def update_ticket(
         update_doc["assignee"] = ObjectId(ticket_data.assignee)
     if ticket_data.due_date:
         update_doc["due_date"] = ticket_data.due_date
+    if ticket_data.solution:
+        update_doc["solution"] = ticket_data.solution
     
     # Use the ticket's _id for update (we already have the ticket object)
+    old_status = ticket.get("status")
+    new_status = update_doc.get("status")
+    
     await db.tickets.update_one(
         {"_id": ticket["_id"]},
         {"$set": update_doc}
@@ -371,15 +391,35 @@ async def update_ticket(
     
     # Return updated ticket
     updated_ticket = await db.tickets.find_one({"_id": ticket["_id"]})
-    return normalize_ticket(updated_ticket)
+    normalized = normalize_ticket(updated_ticket)
+    
+    # Send email notification if status changed
+    if new_status and new_status != old_status:
+        try:
+            creator = await db.users.find_one({"_id": ticket.get("creator")})
+            if creator and creator.get("email"):
+                solution = update_doc.get("solution") or updated_ticket.get("solution")
+                await send_ticket_status_notification(
+                    ticket=normalized,
+                    user_email=creator.get("email"),
+                    user_name=creator.get("name", "User"),
+                    old_status=old_status,
+                    new_status=new_status,
+                    changed_by=current_user.get("name", "Admin"),
+                    solution=solution
+                )
+        except Exception as e:
+            print(f"Error sending status change email: {e}")
+    
+    return normalized
 
 
 @router.post("/{ticket_id}/approve", response_model=TicketResponse)
 async def approve_ticket(
     ticket_id: str,
-    current_user: dict = Depends(get_current_admin)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Approve ticket (admin only)"""
+    """Approve ticket (admin, agent, or department-head)"""
     db = await get_database()
     
     # Try to find by ObjectId first
@@ -397,6 +437,31 @@ async def approve_ticket(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ticket not found"
+        )
+    
+    # Check permissions: admin/agent can approve any ticket, department-head can only approve tickets from their department
+    user_role = current_user.get("role")
+    if user_role not in ["admin", "agent"]:
+        if user_role == "department-head":
+            # Check if ticket belongs to department head's department
+            user_dept = current_user.get("department")
+            ticket_dept = ticket.get("department")
+            if not user_dept or not ticket_dept or str(ticket_dept) != str(user_dept):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only approve tickets from your department"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to approve tickets"
+            )
+    
+    # Check if ticket is in approval-pending status
+    if ticket.get("status") != "approval-pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ticket must be in 'approval-pending' status to be approved"
         )
     
     # Update ticket with approval info
@@ -431,6 +496,21 @@ async def approve_ticket(
             print(f"Error fetching approved_by user: {e}")
             normalized["approvedBy"] = str(updated_ticket["approved_by"])
     
+    # Send email notification to ticket creator
+    try:
+        creator = await db.users.find_one({"_id": ticket.get("creator")})
+        if creator and creator.get("email"):
+            await send_ticket_status_notification(
+                ticket=normalized,
+                user_email=creator.get("email"),
+                user_name=creator.get("name", "User"),
+                old_status="approval-pending",
+                new_status="approved",
+                changed_by=current_user.get("name", "Admin")
+            )
+    except Exception as e:
+        print(f"Error sending approval email: {e}")
+    
     return normalized
 
 
@@ -438,9 +518,9 @@ async def approve_ticket(
 async def reject_ticket(
     ticket_id: str,
     request: TicketRejectRequest,
-    current_user: dict = Depends(get_current_admin)
+    current_user: dict = Depends(get_current_user)
 ):
-    """Reject ticket (admin only)"""
+    """Reject ticket (admin, agent, or department-head)"""
     db = await get_database()
     
     try:
@@ -455,6 +535,31 @@ async def reject_ticket(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Ticket not found"
+        )
+    
+    # Check permissions: admin/agent can reject any ticket, department-head can only reject tickets from their department
+    user_role = current_user.get("role")
+    if user_role not in ["admin", "agent"]:
+        if user_role == "department-head":
+            # Check if ticket belongs to department head's department
+            user_dept = current_user.get("department")
+            ticket_dept = ticket.get("department")
+            if not user_dept or not ticket_dept or str(ticket_dept) != str(user_dept):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You can only reject tickets from your department"
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to reject tickets"
+            )
+    
+    # Check if ticket is in approval-pending status
+    if ticket.get("status") != "approval-pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Ticket must be in 'approval-pending' status to be rejected"
         )
     
     await db.tickets.update_one(
@@ -476,6 +581,22 @@ async def reject_ticket(
         }
     )
     
+    # Send email notification to ticket creator
+    try:
+        creator = await db.users.find_one({"_id": ticket.get("creator")})
+        if creator and creator.get("email"):
+            normalized_ticket = normalize_ticket(ticket)
+            await send_ticket_status_notification(
+                ticket=normalized_ticket,
+                user_email=creator.get("email"),
+                user_name=creator.get("name", "User"),
+                old_status="approval-pending",
+                new_status="rejected",
+                changed_by=current_user.get("name", "Admin")
+            )
+    except Exception as e:
+        print(f"Error sending rejection email: {e}")
+    
     return {"message": "Ticket rejected successfully"}
 
 
@@ -487,10 +608,18 @@ async def get_dashboard_stats(
     """Get dashboard statistics"""
     db = await get_database()
     query = {}
+    user_role = current_user.get("role")
     
     # Role-based filtering
-    if current_user.get("role") not in ["admin", "agent"]:
-        query["creator"] = ObjectId(current_user["id"])
+    if user_role not in ["admin", "agent"]:
+        if user_role == "department-head":
+            # Department heads see tickets from their department
+            user_dept = current_user.get("department")
+            if user_dept:
+                query["department"] = ObjectId(user_dept)
+        else:
+            # Regular users see only their own tickets
+            query["creator"] = ObjectId(current_user["id"])
     
     if organization:
         query["organization"] = ObjectId(organization)
@@ -499,14 +628,57 @@ async def get_dashboard_stats(
     open_count = await db.tickets.count_documents({**query, "status": "open"})
     closed_count = await db.tickets.count_documents({**query, "status": "closed"})
     in_progress = await db.tickets.count_documents({**query, "status": "in-progress"})
+    approval_pending = await db.tickets.count_documents({**query, "status": "approval-pending"})
+    approved = await db.tickets.count_documents({**query, "status": "approved"})
+    rejected = await db.tickets.count_documents({**query, "status": "rejected"})
+    resolved = await db.tickets.count_documents({**query, "status": "resolved"})
     
     # Get recent tickets
     recent_tickets = await db.tickets.find(query).sort("created_at", -1).limit(10).to_list(length=10)
     
+    # Get my open tickets (for admin/agent, this is all open tickets; for users, it's their own)
+    my_open_query = query.copy()
+    if user_role not in ["admin", "agent"]:
+        my_open_query["creator"] = ObjectId(current_user["id"])
+    my_open_query["status"] = {"$in": ["open", "in-progress"]}
+    my_open_tickets = await db.tickets.find(my_open_query).sort("created_at", -1).limit(10).to_list(length=10)
+    
+    # Status distribution
+    status_pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}}
+    ]
+    status_distribution = []
+    async for doc in db.tickets.aggregate(status_pipeline):
+        status_distribution.append({
+            "name": doc["_id"],
+            "value": doc["count"]
+        })
+    
+    # Priority distribution
+    priority_pipeline = [
+        {"$match": query},
+        {"$group": {"_id": "$priority", "count": {"$sum": 1}}}
+    ]
+    priority_distribution = []
+    async for doc in db.tickets.aggregate(priority_pipeline):
+        priority_distribution.append({
+            "name": doc["_id"],
+            "value": doc["count"]
+        })
+    
     return {
         "totalTickets": total,
+        "openTickets": open_count,
         "pendingTickets": open_count,
         "closedTickets": closed_count,
         "inProgressTickets": in_progress,
-        "recentTickets": [normalize_ticket(t) for t in recent_tickets]
+        "approvalPendingTickets": approval_pending,
+        "approvedTickets": approved,
+        "rejectedTickets": rejected,
+        "resolvedTickets": resolved,
+        "recentTickets": [normalize_ticket(t) for t in recent_tickets],
+        "myOpenTickets": [normalize_ticket(t) for t in my_open_tickets],
+        "statusDistribution": status_distribution,
+        "priorityDistribution": priority_distribution
     }

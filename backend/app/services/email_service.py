@@ -273,3 +273,192 @@ This is an automated email. Please do not reply to this message.
         html=html_body,
         text=text_body
     )
+
+
+async def send_ticket_status_notification(
+    ticket: dict,
+    user_email: str,
+    user_name: str,
+    old_status: str,
+    new_status: str,
+    changed_by: str,
+    solution: Optional[str] = None
+) -> bool:
+    """
+    Send email notification when ticket status changes
+    
+    Args:
+        ticket: Ticket dictionary
+        user_email: Recipient email (ticket creator)
+        user_name: Recipient name
+        old_status: Previous status
+        new_status: New status
+        changed_by: Name of person who changed status
+        solution: Optional solution text (for resolved/closed tickets)
+    
+    Returns:
+        bool: True if email sent successfully
+    """
+    ticket_id = ticket.get("ticket_id") or ticket.get("ticketId") or ticket.get("id", "N/A")
+    ticket_title = ticket.get("title", "Untitled Ticket")
+    
+    # Status-specific subjects and messages
+    status_messages = {
+        "approval-pending": {
+            "subject": f"Ticket #{ticket_id} - Pending Approval",
+            "message": f"Your ticket has been moved to 'Pending Approval' status and is awaiting department head approval."
+        },
+        "approved": {
+            "subject": f"Ticket #{ticket_id} - Approved",
+            "message": f"Great news! Your ticket has been approved by {changed_by}. The admin team will now work on providing a solution."
+        },
+        "rejected": {
+            "subject": f"Ticket #{ticket_id} - Rejected",
+            "message": f"Your ticket has been rejected by {changed_by}. Please review the ticket details for more information."
+        },
+        "in-progress": {
+            "subject": f"Ticket #{ticket_id} - In Progress",
+            "message": f"Your ticket is now being worked on by the support team."
+        },
+        "resolved": {
+            "subject": f"Ticket #{ticket_id} - Resolved",
+            "message": f"Your ticket has been resolved! {f'A solution has been provided: {solution}' if solution else 'Please check the ticket for details.'}"
+        },
+        "closed": {
+            "subject": f"Ticket #{ticket_id} - Closed",
+            "message": f"Your ticket has been closed. {f'Solution: {solution}' if solution else 'Thank you for using our ticketing system.'}"
+        }
+    }
+    
+    status_info = status_messages.get(new_status, {
+        "subject": f"Ticket #{ticket_id} - Status Updated",
+        "message": f"Your ticket status has been changed from {old_status} to {new_status}."
+    })
+    
+    subject = status_info["subject"]
+    
+    # HTML email template
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body {{
+                font-family: Arial, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+            }}
+            .header {{
+                background-color: #4F46E5;
+                color: white;
+                padding: 20px;
+                text-align: center;
+                border-radius: 5px 5px 0 0;
+            }}
+            .content {{
+                background-color: #f9fafb;
+                padding: 30px;
+                border: 1px solid #e5e7eb;
+            }}
+            .ticket-info {{
+                background-color: #fff;
+                border: 1px solid #e5e7eb;
+                border-radius: 5px;
+                padding: 15px;
+                margin: 20px 0;
+            }}
+            .status-badge {{
+                display: inline-block;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin: 10px 0;
+            }}
+            .status-pending {{ background-color: #f59e0b; color: white; }}
+            .status-approved {{ background-color: #10b981; color: white; }}
+            .status-rejected {{ background-color: #ef4444; color: white; }}
+            .status-in-progress {{ background-color: #3b82f6; color: white; }}
+            .status-resolved {{ background-color: #10b981; color: white; }}
+            .status-closed {{ background-color: #6b7280; color: white; }}
+            .solution-box {{
+                background-color: #ecfdf5;
+                border-left: 4px solid #10b981;
+                padding: 15px;
+                margin: 20px 0;
+            }}
+            .footer {{
+                text-align: center;
+                color: #6b7280;
+                font-size: 12px;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>Ticket Status Update</h1>
+        </div>
+        <div class="content">
+            <p>Hello {user_name},</p>
+            
+            <p>{status_info['message']}</p>
+            
+            <div class="ticket-info">
+                <p><strong>Ticket ID:</strong> #{ticket_id}</p>
+                <p><strong>Title:</strong> {ticket_title}</p>
+                <p><strong>Status:</strong> <span class="status-badge status-{new_status.replace('-', '')}">{new_status.replace('-', ' ').title()}</span></p>
+                <p><strong>Changed by:</strong> {changed_by}</p>
+            </div>
+            
+            {f'''
+            <div class="solution-box">
+                <h3>Solution:</h3>
+                <p>{solution}</p>
+            </div>
+            ''' if solution else ''}
+            
+            <p>You can view and track your ticket by logging into the Ticketing Tool.</p>
+            
+            <p>Best regards,<br>The Ticketing Tool Team</p>
+        </div>
+        <div class="footer">
+            <p>This is an automated email. Please do not reply to this message.</p>
+        </div>
+    </body>
+    </html>
+    """
+    
+    # Plain text version
+    text_body = f"""
+Ticket Status Update
+
+Hello {user_name},
+
+{status_info['message']}
+
+Ticket ID: #{ticket_id}
+Title: {ticket_title}
+Status: {new_status.replace('-', ' ').title()}
+Changed by: {changed_by}
+
+{f'Solution: {solution}' if solution else ''}
+
+You can view and track your ticket by logging into the Ticketing Tool.
+
+Best regards,
+The Ticketing Tool Team
+
+---
+This is an automated email. Please do not reply to this message.
+    """
+    
+    return await send_email(
+        to=user_email,
+        subject=subject,
+        html=html_body,
+        text=text_body
+    )

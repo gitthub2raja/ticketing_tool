@@ -92,12 +92,14 @@ export const Users = () => {
   const handleOpenModal = (user = null) => {
     if (user) {
       setEditingUser(user)
+      // Convert is_active (boolean) to status (string) for display
+      const isActive = user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)
       setFormData({
         name: user.name,
         email: user.email,
         password: '', // Don't show existing password
         role: user.role,
-        status: user.status,
+        status: isActive ? 'active' : 'inactive',
         organization: user.organization?._id || user.organization || '',
         department: user.department?._id || user.department || '',
         sendWelcomeEmail: false, // Don't send welcome email when editing
@@ -154,6 +156,12 @@ export const Users = () => {
       if (editingUser && !submitData.password) {
         // Remove password if editing and not provided
         delete submitData.password
+      }
+      
+      // Convert status (string) to is_active (boolean) for backend
+      if (submitData.status !== undefined) {
+        submitData.is_active = submitData.status === 'active'
+        delete submitData.status
       }
 
       if (editingUser) {
@@ -215,15 +223,18 @@ export const Users = () => {
 
   const handleExportUsers = () => {
     const headers = ['Name', 'Email', 'Password', 'Role', 'Status', 'Organization', 'Department']
-    const rows = users.map(user => [
-      user.name,
-      user.email,
-      '', // Password not exported for security
-      user.role,
-      user.status,
-      user.organization?.name || 'N/A',
-      user.department?.name || 'N/A',
-    ])
+    const rows = users.map(user => {
+      const isActive = user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)
+      return [
+        user.name,
+        user.email,
+        '', // Password not exported for security
+        user.role,
+        isActive ? 'Active' : 'Inactive',
+        user.organization?.name || 'N/A',
+        user.department?.name || 'N/A',
+      ]
+    })
 
     const csvContent = [
       headers.join(','),
@@ -429,8 +440,8 @@ export const Users = () => {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
-                        {user.status}
+                      <Badge variant={(user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)) ? 'success' : 'warning'}>
+                        {(user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)) ? 'Active' : 'Inactive'}
                       </Badge>
                     </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -564,16 +575,25 @@ export const Users = () => {
                 </label>
               </div>
             )}
-            <Select
-              label="Status"
-              value={formData.status}
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-              options={[
-                { value: 'active', label: 'Active' },
-                { value: 'inactive', label: 'Inactive' },
-              ]}
-              required
-            />
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Status
+              </label>
+              <div className="flex items-center space-x-3 h-10">
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.status === 'active'}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  <span className="ml-3 text-sm font-medium text-gray-700">
+                    {formData.status === 'active' ? 'Active' : 'Inactive'}
+                  </span>
+                </label>
+              </div>
+            </div>
           </form>
         </Modal>
       </div>

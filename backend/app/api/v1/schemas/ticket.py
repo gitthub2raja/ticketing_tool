@@ -26,6 +26,7 @@ class TicketUpdate(BaseModel):
     department: Optional[str] = None
     assignee: Optional[str] = None
     due_date: Optional[datetime] = None
+    solution: Optional[str] = None  # Solution provided by admin after approval
 
 
 class TicketResponse(BaseModel):
@@ -48,6 +49,7 @@ class TicketResponse(BaseModel):
     updatedAt: str  # ISO string
     approvedAt: Optional[str] = None  # ISO string
     approvedBy: Optional[str] = None
+    solution: Optional[str] = None  # Solution provided by admin
     
     class Config:
         populate_by_name = True  # Allow both field name and alias

@@ -1,7 +1,7 @@
 """
 MFA endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from app.middleware.auth import get_current_user
 from app.db.database import get_database
 from bson import ObjectId

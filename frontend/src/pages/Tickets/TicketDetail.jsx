@@ -351,6 +351,45 @@ export const TicketDetail = () => {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 mb-2">Description</h2>
                   <p className="text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
+                  
+                  {/* Solution Section - Only for approved/resolved/closed tickets */}
+                  {(ticket.status === 'approved' || ticket.status === 'resolved' || ticket.status === 'closed') && (
+                    <div className="mt-6 pt-6 border-t border-gray-200">
+                      <h2 className="text-lg font-semibold text-gray-900 mb-2">Solution</h2>
+                      {(user?.role === 'admin' || user?.role === 'agent') && ticket.status === 'approved' ? (
+                        <div className="space-y-2">
+                          <Textarea
+                            value={ticket.solution || ''}
+                            onChange={(e) => {
+                              const updatedTicket = { ...ticket, solution: e.target.value }
+                              setTicket(updatedTicket)
+                            }}
+                            placeholder="Provide a solution for this ticket..."
+                            rows={4}
+                            className="w-full"
+                          />
+                          <Button
+                            onClick={async () => {
+                              try {
+                                const updated = await ticketsAPI.update(id, { solution: ticket.solution })
+                                setTicket(updated)
+                                toast.success('Solution saved successfully!')
+                              } catch (error) {
+                                toast.error('Failed to save solution')
+                              }
+                            }}
+                            className="btn-primary"
+                          >
+                            Save Solution
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <p className="text-gray-700 whitespace-pre-wrap">{ticket.solution || 'No solution provided yet.'}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             </Card>

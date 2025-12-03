@@ -52,14 +52,11 @@ export const DepartmentHeadDashboard = () => {
       })
 
       // Load pending tickets for approval - filter by approval-pending status
+      // Backend already filters by department for department-head role
       const allTickets = await ticketsAPI.getAll({ status: 'approval-pending' })
       console.log('Approval pending tickets found:', allTickets.length, allTickets) // Debug log
       
-      // Filter tickets that have a department (department heads only see tickets from their department)
-      const ticketsWithDepartment = allTickets.filter(ticket => ticket.department)
-      console.log('Tickets with department:', ticketsWithDepartment.length) // Debug log
-      
-      setPendingTickets(ticketsWithDepartment.slice(0, 10))
+      setPendingTickets(allTickets.slice(0, 10))
     } catch (error) {
       console.error('Dashboard data error:', error)
       toast.error('Failed to load dashboard data')
