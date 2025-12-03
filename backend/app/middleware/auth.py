@@ -6,7 +6,9 @@ from fastapi.security import OAuth2PasswordBearer, HTTPBearer, HTTPAuthorization
 from app.core.security import decode_access_token
 from app.db.database import get_database
 from bson import ObjectId
+from datetime import datetime
 from typing import Optional
+import json
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 http_bearer = HTTPBearer(auto_error=False)
@@ -59,12 +61,30 @@ async def get_current_user(
                 detail="User account is disabled"
             )
         
-        user["id"] = str(user["_id"])
-        del user["_id"]
-        # Safely remove password if it exists
-        user.pop("password", None)
+        # Convert all BSON types to JSON-serializable types
+        # Create a clean dict with only JSON-serializable values
+        user_dict = {
+            "id": str(user["_id"]),
+            "email": user.get("email", ""),
+            "name": user.get("name", ""),
+            "role": user.get("role", "user"),
+            "is_active": user.get("is_active", True),
+            "mfa_enabled": user.get("mfa_enabled", False),
+        }
         
-        return user
+        # Convert ObjectId fields to strings if they exist
+        if user.get("organization"):
+            user_dict["organization"] = str(user["organization"])
+        if user.get("department"):
+            user_dict["department"] = str(user["department"])
+        
+        # Convert datetime fields to ISO strings
+        if user.get("created_at"):
+            user_dict["created_at"] = user["created_at"].isoformat() if hasattr(user["created_at"], "isoformat") else str(user["created_at"])
+        if user.get("updated_at"):
+            user_dict["updated_at"] = user["updated_at"].isoformat() if hasattr(user["updated_at"], "isoformat") else str(user["updated_at"])
+        
+        return user_dict
     except HTTPException:
         raise
     except Exception as e:
