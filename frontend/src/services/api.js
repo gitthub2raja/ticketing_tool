@@ -45,11 +45,14 @@ const apiCall = async (endpoint, options = {}) => {
     if (!response.ok) {
       // Handle 401 Unauthorized - token expired or invalid
       if (response.status === 401) {
-        // Clear invalid token
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        // Redirect to login if not already there
-        if (window.location.pathname !== '/login') {
+        // Only clear and redirect if we're not already on login page
+        // This prevents redirect loops
+        const currentPath = window.location.pathname
+        if (currentPath !== '/login' && !currentPath.startsWith('/mfa-login')) {
+          // Clear invalid token
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          // Redirect to login
           window.location.href = '/login'
         }
         const error = await response.json().catch(() => ({ message: 'Session expired. Please login again.' }))
@@ -126,7 +129,7 @@ export const ticketsAPI = {
     if (filters.organization) params.append('organization', filters.organization)
     
     const query = params.toString()
-    return apiCall(`/tickets${query ? `?${query}` : ''}`)
+    return apiCall(`/tickets/${query ? `?${query}` : ''}`)
   },
   getById: async (id) => {
     return apiCall(`/tickets/${id}`)
@@ -197,7 +200,7 @@ export const usersAPI = {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
     const query = params.toString()
-    return apiCall(`/users${query ? `?${query}` : ''}`)
+    return apiCall(`/users/${query ? `?${query}` : ''}`)
   },
   getMentions: async () => {
     return apiCall('/users/mentions')
@@ -424,7 +427,7 @@ export const adminAPI = {
 // Organizations API
 export const organizationsAPI = {
   getAll: async () => {
-    return apiCall('/organizations')
+    return apiCall('/organizations/')
   },
   getById: async (id) => {
     return apiCall(`/organizations/${id}`)
@@ -451,7 +454,7 @@ export const organizationsAPI = {
 // Categories API
 export const categoriesAPI = {
   getAll: async () => {
-    return apiCall('/categories')
+    return apiCall('/categories/')
   },
   getAllAdmin: async (organization = null) => {
     const params = new URLSearchParams()
@@ -484,7 +487,7 @@ export const categoriesAPI = {
 // Departments API
 export const departmentsAPI = {
   getAll: async () => {
-    return apiCall('/departments')
+    return apiCall('/departments/')
   },
   getById: async (id) => {
     return apiCall(`/departments/${id}`)
@@ -641,7 +644,8 @@ export const emailTemplatesAPI = {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
     if (type) params.append('type', type)
-    return apiCall(`/email-templates?${params.toString()}`)
+    const query = params.toString()
+    return apiCall(`/email-templates/${query ? `?${query}` : ''}`)
   },
   getById: async (id) => {
     return apiCall(`/email-templates/${id}`)
@@ -675,7 +679,8 @@ export const emailAutomationAPI = {
   getAll: async (organization = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
-    return apiCall(`/email-automation?${params.toString()}`)
+    const query = params.toString()
+    return apiCall(`/email-automation/${query ? `?${query}` : ''}`)
   },
   getById: async (id) => {
     return apiCall(`/email-automation/${id}`)
@@ -766,7 +771,8 @@ export const faqAPI = {
     if (organization) params.append('organization', organization)
     if (category) params.append('category', category)
     if (search) params.append('search', search)
-    return apiCall(`/faq?${params.toString()}`)
+    const query = params.toString()
+    return apiCall(`/faq/${query ? `?${query}` : ''}`)
   },
   getById: async (id) => {
     return apiCall(`/faq/${id}`)
