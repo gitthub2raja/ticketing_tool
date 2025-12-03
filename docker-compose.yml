@@ -43,6 +43,7 @@ services:
       - TZ=Asia/Kolkata
     volumes:
       - ./backend/uploads:/app/uploads
+      - ./backend/app:/app/app
     depends_on:
       mongodb:
         condition: service_healthy

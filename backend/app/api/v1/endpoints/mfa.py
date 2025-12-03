@@ -54,14 +54,28 @@ async def get_mfa_setup(current_user: dict = Depends(get_current_user)):
     
     return {
         "secret": secret,
-        "qr_code": f"data:image/png;base64,{qr_code_base64}"
+        "qrCode": f"data:image/png;base64,{qr_code_base64}",
+        "manualEntryKey": secret,
+        "qr_code": f"data:image/png;base64,{qr_code_base64}"  # Backward compatibility
     }
 
 
 @router.post("/verify")
-async def verify_mfa(code: str, current_user: dict = Depends(get_current_user)):
+async def verify_mfa(
+    request: dict = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
     """Verify MFA code and enable MFA"""
     db = await get_database()
+    
+    # Get code from request (can be 'code' or 'token')
+    code = request.get("code") or request.get("token", "")
+    
+    if not code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification code is required"
+        )
     
     user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
     
