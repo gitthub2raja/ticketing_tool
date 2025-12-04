@@ -33,13 +33,21 @@ export const Modal = ({
         >
           <div className="px-6 pt-6 pb-4 sm:p-6 relative z-10">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-900 uppercase tracking-wider">
-                {title}
-              </h3>
+              <div className="flex-1">
+                {typeof title === 'string' ? (
+                  <h3 className="text-xl font-bold text-gray-900 uppercase tracking-wider">
+                    {title}
+                  </h3>
+                ) : (
+                  <div className="text-xl font-bold text-gray-900 uppercase tracking-wider">
+                    {title}
+                  </div>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors duration-300 hover:scale-110"
+                className="text-gray-400 hover:text-gray-600 focus:outline-none transition-colors duration-300 hover:scale-110 ml-4"
               >
                 <X size={24} />
               </button>

@@ -22,11 +22,9 @@ export const NewTicket = () => {
     category: '',
     priority: '',
     assignee: '',
-    ticketId: '', // Optional manual ticket ID
   })
   const [categories, setCategories] = useState([])
   const [assignees, setAssignees] = useState([])
-  const [showTicketId, setShowTicketId] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
   const navigate = useNavigate()
@@ -106,8 +104,17 @@ export const NewTicket = () => {
       formDataToSend.append('category', formData.category)
       formDataToSend.append('priority', formData.priority)
       if (formData.assignee) formDataToSend.append('assignee', formData.assignee)
-      if (formData.ticketId && formData.ticketId.trim() !== '') {
-        formDataToSend.append('ticketId', parseInt(formData.ticketId))
+
+      // Check for manual ticket ID setting
+      const useManualTicketId = localStorage.getItem('useManualTicketId') === 'true'
+      const manualTicketId = localStorage.getItem('manualTicketId')
+      if (useManualTicketId && manualTicketId) {
+        // Get the last used ticket ID from localStorage or use the manual ID
+        const lastUsedId = parseInt(localStorage.getItem('lastUsedTicketId') || manualTicketId)
+        const nextTicketId = lastUsedId + 1
+        formDataToSend.append('ticketId', nextTicketId.toString())
+        // Update last used ID for next ticket
+        localStorage.setItem('lastUsedTicketId', nextTicketId.toString())
       }
 
       // Append files
@@ -159,33 +166,6 @@ export const NewTicket = () => {
 
         <Card>
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
-            {/* Optional: Manual Ticket ID (for first-time setup) */}
-            <div className="mb-4">
-              <button
-                type="button"
-                onClick={() => setShowTicketId(!showTicketId)}
-                className="text-sm text-primary-600 hover:text-primary-700"
-              >
-                {showTicketId ? 'Hide' : 'Set'} Manual Ticket ID (Optional)
-              </button>
-              {showTicketId && (
-                <div className="mt-2">
-                  <Input
-                    name="ticketId"
-                    label="Ticket ID (Optional - leave empty for auto-increment)"
-                    placeholder="e.g., 1000"
-                    type="number"
-                    value={formData.ticketId}
-                    onChange={handleChange}
-                    min="1"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    If provided, this will be used as the ticket ID. Otherwise, it will auto-increment from the highest existing ticket ID.
-                  </p>
-                </div>
-              )}
-            </div>
-
             <Input
               name="title"
               label="Title"

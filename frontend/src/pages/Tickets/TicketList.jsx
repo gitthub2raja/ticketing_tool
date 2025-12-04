@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
-import { Plus, Search, Filter } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { ticketsAPI, departmentsAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -40,19 +40,10 @@ export const TicketList = () => {
     }
   }, [isAdmin])
 
-  // Load tickets on mount and when filters change
+  // Load tickets only on initial mount - no automatic refresh
   useEffect(() => {
     loadTickets()
-  }, [statusFilter, priorityFilter, departmentFilter])
-
-  // Debounce search to avoid too many API calls
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      loadTickets()
-    }, 500) // Wait 500ms after user stops typing
-
-    return () => clearTimeout(timer)
-  }, [searchTerm])
+  }, []) // Empty dependency array - only run on mount
 
   const loadDepartments = async () => {
     try {
@@ -161,14 +152,26 @@ export const TicketList = () => {
                 </h1>
                 <p className="text-sm text-gray-600">Manage and track all support tickets</p>
               </div>
-              <Button 
-                transparent
-                onClick={() => navigate('/tickets/new')}
-                className="animate-scale-in"
-              >
-                <Plus size={20} className="mr-2" />
-                New Ticket
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  transparent
+                  variant="outline"
+                  onClick={loadTickets}
+                  className="flex items-center gap-2"
+                  disabled={loading}
+                >
+                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                  Refresh
+                </Button>
+                <Button 
+                  transparent
+                  onClick={() => navigate('/tickets/new')}
+                  className="animate-scale-in"
+                >
+                  <Plus size={20} className="mr-2" />
+                  New Ticket
+                </Button>
+              </div>
             </div>
 
             {/* Filters */}

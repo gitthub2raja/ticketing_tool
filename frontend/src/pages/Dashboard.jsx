@@ -6,7 +6,7 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { useAuth } from '../contexts/AuthContext'
-import { Ticket, Clock, CheckCircle, AlertCircle, TrendingUp, Users, AlertTriangle, CheckSquare, XSquare } from 'lucide-react'
+import { Ticket, Clock, CheckCircle, AlertCircle, TrendingUp, Users, AlertTriangle, CheckSquare, XSquare, RefreshCw } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
 import { ticketsAPI, organizationsAPI, departmentsAPI } from '../services/api'
 import { format, subDays } from 'date-fns'
@@ -73,13 +73,6 @@ export const Dashboard = () => {
       loadDepartments()
     }
     loadDashboardData()
-    
-    // Real-time refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadDashboardData()
-    }, 30000)
-    
-    return () => clearInterval(interval)
   }, [selectedOrganization, selectedDepartment, user, isAdmin, isDepartmentHead])
 
   const loadOrganizations = async () => {
@@ -400,7 +393,7 @@ export const Dashboard = () => {
                 </h1>
                 <p className="text-sm text-gray-600">System overview and statistics</p>
               </div>
-              <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
                 {isAdmin && organizations.length > 0 && (
                   <div className="w-full sm:w-64">
                     <Select
@@ -414,9 +407,22 @@ export const Dashboard = () => {
                           label: org.name,
                         })),
                       ]}
+                      className="mb-0"
+                      buttonStyle={true}
                     />
                   </div>
                 )}
+                <Button
+                  transparent
+                  variant="outline"
+                  onClick={loadDashboardData}
+                  className={`flex items-center gap-2 mb-4 sm:mb-0 ${isAdmin && organizations.length > 0 ? 'w-full sm:w-64' : ''}`}
+                  disabled={loading}
+                  style={{ height: '42px' }}
+                >
+                  <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                  Refresh
+                </Button>
                 {(isAdmin || isDepartmentHead) && departments.length > 0 && (
                   <div className="w-full sm:w-64">
                     <Select
@@ -430,6 +436,8 @@ export const Dashboard = () => {
                           label: dept.name,
                         })),
                       ]}
+                      className="mb-0"
+                      buttonStyle={true}
                     />
                   </div>
                 )}

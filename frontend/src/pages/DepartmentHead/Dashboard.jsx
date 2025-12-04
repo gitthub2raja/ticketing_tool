@@ -4,7 +4,7 @@ import { Layout } from '../../components/layout/Layout'
 import { Card } from '../../components/ui/Card'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
-import { Ticket, CheckCircle, Clock, AlertCircle, XCircle, CheckSquare, XSquare, AlertTriangle } from 'lucide-react'
+import { Ticket, CheckCircle, Clock, AlertCircle, XCircle, CheckSquare, XSquare, AlertTriangle, RefreshCw } from 'lucide-react'
 import { ticketsAPI } from '../../services/api'
 import { format } from 'date-fns'
 import toast from 'react-hot-toast'
@@ -26,13 +26,6 @@ export const DepartmentHeadDashboard = () => {
 
   useEffect(() => {
     loadDashboardData()
-    
-    // Real-time refresh every 30 seconds
-    const interval = setInterval(() => {
-      loadDashboardData()
-    }, 30000)
-    
-    return () => clearInterval(interval)
   }, [])
 
   const loadDashboardData = async () => {
@@ -193,6 +186,16 @@ export const DepartmentHeadDashboard = () => {
                 </h1>
                 <p className="text-sm text-gray-600">Manage and approve tickets for your department</p>
               </div>
+              <Button
+                transparent
+                variant="outline"
+                onClick={loadDashboardData}
+                className="flex items-center gap-2"
+                disabled={loading}
+              >
+                <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+                Refresh
+              </Button>
             </div>
 
             {/* Stats Cards */}
