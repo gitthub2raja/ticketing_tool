@@ -26,7 +26,6 @@ import { Settings } from './pages/Settings'
 import { Users } from './pages/Admin/Users'
 import { Roles } from './pages/Admin/Roles'
 import { EmailSettings } from './pages/Admin/EmailSettings'
-import { EmailOAuth2Callback } from './pages/Admin/EmailOAuth2Callback'
 import { EmailTemplates } from './pages/Admin/EmailTemplates'
 import { SSOConfig } from './pages/Admin/SSOConfig'
 import { LogoManagement } from './pages/Admin/LogoManagement'
@@ -45,9 +44,6 @@ import { BackupRestore } from './pages/Admin/BackupRestore'
 
 // Reports Page
 import { Reports } from './pages/Reports'
-
-// Department Head Dashboard
-import { DepartmentHeadDashboard } from './pages/DepartmentHead/Dashboard'
 
 // Components
 import { ChatWidget } from './components/ChatWidget'
@@ -236,26 +232,10 @@ function App() {
               }
             />
             <Route
-              path="/admin/email/oauth2/callback"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <EmailOAuth2Callback />
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/admin/email-templates"
               element={
                 <ProtectedRoute requireAdmin>
                   <EmailTemplates />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/department-head/dashboard"
-              element={
-                <ProtectedRoute>
-                  <DepartmentHeadDashboard />
                 </ProtectedRoute>
               }
             />

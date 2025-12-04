@@ -3,49 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { Layout } from '../components/layout/Layout'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Select'
 import { useAuth } from '../contexts/AuthContext'
-import { Ticket, Clock, CheckCircle, AlertCircle, TrendingUp, Users, AlertTriangle } from 'lucide-react'
+import { Ticket, Clock, CheckCircle, AlertCircle, TrendingUp, Users, AlertTriangle, CheckSquare, XSquare } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { ticketsAPI, organizationsAPI } from '../services/api'
+import { ticketsAPI, organizationsAPI, departmentsAPI } from '../services/api'
 import { format, subDays } from 'date-fns'
 import toast from 'react-hot-toast'
-
-// Helper function to safely parse dates
-const safeDate = (dateValue) => {
-  if (!dateValue) return null
-  if (dateValue instanceof Date) {
-    return isNaN(dateValue.getTime()) ? null : dateValue
-  }
-  // Handle both snake_case and camelCase
-  if (typeof dateValue === 'object' && dateValue !== null) {
-    // If it's an object, try to get the date value
-    return null
-  }
-  try {
-    const date = new Date(dateValue)
-    return isNaN(date.getTime()) ? null : date
-  } catch (error) {
-    return null
-  }
-}
-
-// Helper function to safely format dates
-const safeFormat = (dateValue, formatStr, fallback = '—') => {
-  const date = safeDate(dateValue)
-  if (!date) return fallback
-  try {
-    return format(date, formatStr)
-  } catch (error) {
-    console.error('Date formatting error:', error, dateValue)
-    return fallback
-  }
-}
 
 export const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
   const isAdmin = user?.role === 'admin' || user?.role === 'agent'
+  const isDepartmentHead = user?.role === 'department-head'
   
   // Map status labels to status values for navigation
   const getStatusFromLabel = (label) => {
@@ -90,10 +61,16 @@ export const Dashboard = () => {
   const [loading, setLoading] = useState(true)
   const [selectedOrganization, setSelectedOrganization] = useState(null)
   const [organizations, setOrganizations] = useState([])
+  const [selectedDepartment, setSelectedDepartment] = useState(null)
+  const [departments, setDepartments] = useState([])
+  const [approvalPendingTickets, setApprovalPendingTickets] = useState([])
 
   useEffect(() => {
     if (isAdmin) {
       loadOrganizations()
+    }
+    if (isAdmin || isDepartmentHead) {
+      loadDepartments()
     }
     loadDashboardData()
     
@@ -103,7 +80,7 @@ export const Dashboard = () => {
     }, 30000)
     
     return () => clearInterval(interval)
-  }, [selectedOrganization, user, isAdmin])
+  }, [selectedOrganization, selectedDepartment, user, isAdmin, isDepartmentHead])
 
   const loadOrganizations = async () => {
     try {
@@ -115,13 +92,58 @@ export const Dashboard = () => {
     }
   }
 
+  const loadDepartments = async () => {
+    try {
+      const { departmentsAPI } = await import('../services/api')
+      const data = await departmentsAPI.getAll()
+      setDepartments(data)
+    } catch (error) {
+      console.error('Failed to load departments', error)
+    }
+  }
+
   const loadDashboardData = async () => {
     try {
       setLoading(true)
       const data = await ticketsAPI.getDashboardStats(selectedOrganization)
       
-      // For regular users, only show their own tickets
-      if (!isAdmin) {
+      // Load approval pending tickets for department heads
+      if (isDepartmentHead) {
+        try {
+          const pendingTickets = await ticketsAPI.getAll({ status: 'approval-pending' })
+          console.log('Department Head - Approval pending tickets loaded:', pendingTickets?.length || 0, pendingTickets)
+          setApprovalPendingTickets(pendingTickets || [])
+        } catch (error) {
+          console.error('Failed to load approval pending tickets', error)
+          setApprovalPendingTickets([])
+        }
+      }
+      
+      // For department heads, show department stats
+      if (isDepartmentHead) {
+        setStats({
+          totalTickets: data.totalTickets || 0,
+          openTickets: data.openTickets || 0,
+          approvalPendingTickets: data.approvalPendingTickets || 0,
+          approvedTickets: data.approvedTickets || 0,
+          rejectedTickets: data.rejectedTickets || 0,
+          inProgressTickets: data['in-progress'] || 0,
+          resolvedTickets: data.resolvedTickets || 0,
+          closedTickets: data.closedTickets || 0,
+          pendingTickets: data.pendingTickets || 0,
+          overdueTickets: data.overdueTickets || 0,
+        })
+        setRecentTickets(data.recentTickets || [])
+        setMyOpenTickets(data.myOpenTickets || [])
+        setStatusData(data.statusDistribution || [])
+        const totalPriorityTickets = (data.priorityDistribution || []).reduce((sum, item) => sum + item.value, 0)
+        const priorityWithPercentages = (data.priorityDistribution || []).map(item => ({
+          ...item,
+          percentage: totalPriorityTickets > 0 ? Math.round((item.value / totalPriorityTickets) * 100) : 0
+        }))
+        setPriorityData(priorityWithPercentages)
+      } else if (!isAdmin) {
+        // For regular users, only show their own tickets
         // Use data from dashboard stats API which already filters by creator for regular users
         const myOpenTicketsList = data.myOpenTickets || []
         
@@ -136,21 +158,8 @@ export const Dashboard = () => {
           overdueTickets: data.overdueTickets || 0,
         }
         
-        // Normalize ticket dates
-        const normalizeTicketDates = (tickets) => {
-          return tickets.map(ticket => ({
-            ...ticket,
-            createdAt: ticket.createdAt || ticket.created_at,
-            updatedAt: ticket.updatedAt || ticket.updated_at,
-            dueDate: ticket.dueDate || ticket.due_date,
-            approvedAt: ticket.approvedAt || ticket.approved_at,
-            ticketId: ticket.ticketId || ticket.ticket_id,
-            _id: ticket._id || ticket.id
-          }))
-        }
-        
         setStats(myStats)
-        setMyOpenTickets(normalizeTicketDates(myOpenTicketsList))
+        setMyOpenTickets(myOpenTicketsList)
         setRecentTickets([]) // Don't show recent tickets for regular users
         
         // Status distribution for user's tickets
@@ -186,24 +195,11 @@ export const Dashboard = () => {
         pendingTickets: data.pendingTickets || 0,
         overdueTickets: data.overdueTickets || 0,
       })
-        // Normalize ticket dates (handle both snake_case and camelCase)
-        const normalizeTicketDates = (tickets) => {
-          return tickets.map(ticket => ({
-            ...ticket,
-            createdAt: ticket.createdAt || ticket.created_at,
-            updatedAt: ticket.updatedAt || ticket.updated_at,
-            dueDate: ticket.dueDate || ticket.due_date,
-            approvedAt: ticket.approvedAt || ticket.approved_at,
-            ticketId: ticket.ticketId || ticket.ticket_id,
-            _id: ticket._id || ticket.id
-          }))
-        }
+        setRecentTickets(data.recentTickets || [])
         
-        setRecentTickets(normalizeTicketDates(data.recentTickets || []))
-        
-        let openTicketsToShow = normalizeTicketDates(data.myOpenTickets || [])
+        let openTicketsToShow = data.myOpenTickets || []
         if (openTicketsToShow.length === 0 && data.recentTickets && data.recentTickets.length > 0) {
-          const openFromRecent = normalizeTicketDates(data.recentTickets).filter(t => 
+          const openFromRecent = data.recentTickets.filter(t => 
             t.status === 'open' || t.status === 'in-progress'
           )
           if (openFromRecent.length > 0) {
@@ -239,7 +235,7 @@ export const Dashboard = () => {
     }
   }
 
-  const statsData = isAdmin ? [
+  const statsData = (isAdmin || isDepartmentHead) ? [
     { 
       label: 'Total Tickets', 
       value: stats.totalTickets.toLocaleString(), 
@@ -404,22 +400,40 @@ export const Dashboard = () => {
                 </h1>
                 <p className="text-sm text-gray-600">System overview and statistics</p>
               </div>
-              {isAdmin && organizations.length > 0 && (
-                <div className="w-full sm:w-64">
-                  <Select
-                    label="Filter by Organization"
-                    value={selectedOrganization || ''}
-                    onChange={(e) => setSelectedOrganization(e.target.value || null)}
-                    options={[
-                      { value: '', label: 'All Organizations' },
-                      ...organizations.map(org => ({
-                        value: org._id || org.id,
-                        label: org.name,
-                      })),
-                    ]}
-                  />
-                </div>
-              )}
+              <div className="flex flex-col sm:flex-row gap-4">
+                {isAdmin && organizations.length > 0 && (
+                  <div className="w-full sm:w-64">
+                    <Select
+                      label="Filter by Organization"
+                      value={selectedOrganization || ''}
+                      onChange={(e) => setSelectedOrganization(e.target.value || null)}
+                      options={[
+                        { value: '', label: 'All Organizations' },
+                        ...organizations.map(org => ({
+                          value: org._id || org.id,
+                          label: org.name,
+                        })),
+                      ]}
+                    />
+                  </div>
+                )}
+                {(isAdmin || isDepartmentHead) && departments.length > 0 && (
+                  <div className="w-full sm:w-64">
+                    <Select
+                      label="Filter by Department"
+                      value={selectedDepartment || ''}
+                      onChange={(e) => setSelectedDepartment(e.target.value || null)}
+                      options={[
+                        { value: '', label: 'All Departments' },
+                        ...departments.map(dept => ({
+                          value: dept._id || dept.id,
+                          label: dept.name,
+                        })),
+                      ]}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Stats Grid */}
@@ -516,8 +530,135 @@ export const Dashboard = () => {
               </Card>
             </div>
 
+            {/* Approval Pending Tickets - Only for Department Heads */}
+            {isDepartmentHead && (
+              <Card title="Pending Approval" className="animate-slide-down">
+                <div className="overflow-x-auto">
+                  {loading ? (
+                    <div className="text-center py-12">
+                      <div className="inline-block animate-spin text-primary-600 text-4xl mb-4">⟳</div>
+                      <p className="text-gray-600">Loading pending tickets...</p>
+                    </div>
+                  ) : approvalPendingTickets.length === 0 ? (
+                    <div className="text-center py-12">
+                      <CheckCircle className="mx-auto h-12 w-12 text-gray-400 mb-4" />
+                      <p className="text-gray-600">No tickets pending approval</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        Tickets will appear here when they are moved to "Approval Pending" status and match your department.
+                      </p>
+                    </div>
+                  ) : (
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gradient-to-r from-gray-50 to-gray-100/50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Ticket</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Priority</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Creator</th>
+                          <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Created</th>
+                          <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {approvalPendingTickets.slice(0, 10).map((ticket) => (
+                          <tr 
+                            key={ticket._id}
+                            className="hover:bg-gradient-to-r hover:from-primary-50/50 hover:to-transparent transition-all duration-300"
+                          >
+                            <td className="px-6 py-4">
+                              <div className="text-sm font-semibold text-gray-900">#{ticket.ticketId}</div>
+                              <div className="text-sm text-gray-500">{ticket.title}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <Badge 
+                                variant={
+                                  ticket.priority === 'urgent' || ticket.priority === 'high' ? 'danger' :
+                                  ticket.priority === 'medium' ? 'warning' : 'info'
+                                }
+                              >
+                                {ticket.priority}
+                              </Badge>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {ticket.creator?.name || 'Unknown'}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                              <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                              <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  transparent
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    navigate(`/tickets/${ticket.ticketId}`)
+                                  }}
+                                  className="text-xs"
+                                  type="button"
+                                >
+                                  View
+                                </Button>
+                                <Button
+                                  transparent
+                                  onClick={async (e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    try {
+                                      await ticketsAPI.approveTicket(ticket.ticketId)
+                                      toast.success('Ticket approved successfully!')
+                                      loadDashboardData()
+                                    } catch (error) {
+                                      console.error('Approve error:', error)
+                                      toast.error(error.message || 'Failed to approve ticket')
+                                    }
+                                  }}
+                                  className="text-xs bg-green-500 hover:bg-green-600 text-white border-0"
+                                  type="button"
+                                >
+                                  <CheckSquare size={14} className="mr-1" />
+                                  Approve
+                                </Button>
+                                <Button
+                                  transparent
+                                  onClick={async (e) => {
+                                    e.preventDefault()
+                                    e.stopPropagation()
+                                    const reason = window.prompt('Please provide a reason for rejection:')
+                                    if (reason === null) return
+                                    if (!reason.trim()) {
+                                      toast.error('Rejection reason is required')
+                                      return
+                                    }
+                                    try {
+                                      await ticketsAPI.rejectTicket(ticket.ticketId, reason)
+                                      toast.success('Ticket rejected')
+                                      loadDashboardData()
+                                    } catch (error) {
+                                      console.error('Reject error:', error)
+                                      toast.error(error.message || 'Failed to reject ticket')
+                                    }
+                                  }}
+                                  className="text-xs bg-red-500 hover:bg-red-600 text-white border-0"
+                                  type="button"
+                                >
+                                  <XSquare size={14} className="mr-1" />
+                                  Reject
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </Card>
+            )}
+
             {/* My Open Tickets - Only for regular users */}
-            {!isAdmin && (
+            {!isAdmin && !isDepartmentHead && (
               <Card title="My Tickets">
                 <div className="space-y-3">
                   {loading ? (
@@ -555,9 +696,9 @@ export const Dashboard = () => {
                             </div>
                             <p className="text-sm text-gray-900 font-medium mb-1">{ticket.title}</p>
                             <p className="text-xs text-gray-500">
-                              Created: {safeFormat(ticket.createdAt, 'MMM dd, yyyy HH:mm', 'N/A')}
+                              Created: {format(new Date(ticket.createdAt), 'MMM dd, yyyy HH:mm')}
                               {ticket.dueDate && (
-                                <> • Due: {safeFormat(ticket.dueDate, 'MMM dd, yyyy HH:mm', 'N/A')}</>
+                                <> • Due: {format(new Date(ticket.dueDate), 'MMM dd, yyyy HH:mm')}</>
                               )}
                             </p>
                           </div>
@@ -570,7 +711,7 @@ export const Dashboard = () => {
             )}
 
             {/* My Open Tickets and Recent Activity Row - Only for Admin/Agent */}
-            {isAdmin && (
+            {(isAdmin || isDepartmentHead) && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <Card title="My Open Tickets">
                   <div className="space-y-3">
@@ -601,7 +742,7 @@ export const Dashboard = () => {
                               </div>
                               <p className="text-sm text-gray-900 font-medium mb-1">{ticket.title}</p>
                               <p className="text-xs text-gray-500">
-                                {ticket.organization?.name || 'No Organization'} • {safeFormat(ticket.createdAt, 'dd/MM/yyyy', 'N/A')}
+                                {ticket.organization?.name || 'No Organization'} • {format(new Date(ticket.createdAt), 'dd/MM/yyyy')}
                               </p>
                             </div>
                           </div>
@@ -640,7 +781,7 @@ export const Dashboard = () => {
                               </div>
                               <p className="text-sm text-gray-900 font-medium mb-1">{ticket.title}</p>
                               <p className="text-xs text-gray-500">
-                                {ticket.organization?.name || 'No Organization'} • {safeFormat(ticket.createdAt, 'dd/MM/yyyy', 'N/A')}
+                                {ticket.organization?.name || 'No Organization'} • {format(new Date(ticket.createdAt), 'dd/MM/yyyy')}
                               </p>
                             </div>
                           </div>
@@ -685,8 +826,7 @@ export const Dashboard = () => {
                       </tr>
                     ) : (
                       recentTickets.map((ticket, index) => {
-                        const dueDate = safeDate(ticket.dueDate)
-                        const isOverdue = dueDate && dueDate < new Date() && (ticket.status === 'open' || ticket.status === 'in-progress')
+                        const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && (ticket.status === 'open' || ticket.status === 'in-progress')
                         return (
                           <tr 
                             key={ticket._id} 
@@ -734,18 +874,18 @@ export const Dashboard = () => {
                               {ticket.assignee?.name || <span className="text-gray-400">Unassigned</span>}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                              <div className="font-medium">{safeFormat(ticket.createdAt, 'MMM dd, yyyy')}</div>
-                              <div className="text-xs text-gray-500">{safeFormat(ticket.createdAt, 'HH:mm')}</div>
+                              <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                              <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm">
                               {ticket.dueDate ? (
                                 <div>
                                   <div className={isOverdue ? 'text-red-600 font-medium' : 'text-gray-700'}>
-                                    {safeFormat(ticket.dueDate, 'MMM dd, yyyy')}
+                                    {format(new Date(ticket.dueDate), 'MMM dd, yyyy')}
                                     {isOverdue && <span className="ml-1 text-red-600">⚠</span>}
                                   </div>
                                   <div className={`text-xs ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                                    {safeFormat(ticket.dueDate, 'HH:mm')}
+                                    {format(new Date(ticket.dueDate), 'HH:mm')}
                                   </div>
                                 </div>
                               ) : (
@@ -758,7 +898,7 @@ export const Dashboard = () => {
                                   <div className="font-medium text-green-600">{ticket.approvedBy?.name || 'Unknown'}</div>
                                   {ticket.approvedAt && (
                                     <div className="text-xs text-gray-500">
-                                      {safeFormat(ticket.approvedAt, 'MMM dd, yyyy HH:mm')}
+                                      {format(new Date(ticket.approvedAt), 'MMM dd, yyyy HH:mm')}
                                     </div>
                                   )}
                                 </div>

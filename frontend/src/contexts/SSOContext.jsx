@@ -25,18 +25,6 @@ export const SSOProvider = ({ children }) => {
 
   const loadSSOSettings = async () => {
     try {
-      // Check if user is authenticated before loading SSO settings
-      const token = localStorage.getItem('token')
-      if (!token) {
-        // Not authenticated, use defaults
-        setSsoSettings({
-          azureEnabled: false,
-          googleEnabled: false,
-        })
-        setLoading(false)
-        return
-      }
-      
       const configs = await adminAPI.getSSOConfig()
       const settings = {
         azureEnabled: configs.find(c => c.provider === 'azure')?.enabled || false,
@@ -45,6 +33,7 @@ export const SSOProvider = ({ children }) => {
       setSsoSettings(settings)
     } catch (error) {
       // Silently fail - SSO settings are optional
+      console.warn('SSO settings not available:', error.message)
       // Set defaults
       setSsoSettings({
         azureEnabled: false,

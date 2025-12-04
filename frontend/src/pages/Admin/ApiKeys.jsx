@@ -15,7 +15,7 @@ import { apiKeysAPI, organizationsAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { Key, Plus, Copy, Trash2, Eye, EyeOff, CheckCircle, XCircle, Calendar } from 'lucide-react'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 
 export const ApiKeys = () => {
   const { user } = useAuth()
@@ -44,13 +44,10 @@ export const ApiKeys = () => {
     try {
       setLoading(true)
       const data = await apiKeysAPI.getAll()
-      // Ensure data is always an array
-      setApiKeys(Array.isArray(data) ? data : [])
+      setApiKeys(data)
     } catch (error) {
       console.error('Failed to load API keys', error)
       toast.error('Failed to load API keys')
-      // Set empty array on error to prevent undefined errors
-      setApiKeys([])
     } finally {
       setLoading(false)
     }
@@ -59,12 +56,9 @@ export const ApiKeys = () => {
   const loadOrganizations = async () => {
     try {
       const data = await organizationsAPI.getAll()
-      // Ensure data is always an array
-      setOrganizations(Array.isArray(data) ? data : [])
+      setOrganizations(data)
     } catch (error) {
       console.error('Failed to load organizations', error)
-      // Set empty array on error
-      setOrganizations([])
     }
   }
 
@@ -106,11 +100,6 @@ export const ApiKeys = () => {
   }
 
   const handleDelete = async (id) => {
-    if (!id) {
-      toast.error('Invalid API key ID')
-      return
-    }
-
     if (!window.confirm('Are you sure you want to delete this API key? This action cannot be undone.')) {
       return
     }
@@ -118,42 +107,32 @@ export const ApiKeys = () => {
     try {
       await apiKeysAPI.delete(id)
       toast.success('API key deleted successfully')
-      await loadApiKeys()
+      loadApiKeys()
     } catch (error) {
       console.error('Failed to delete API key', error)
-      toast.error(error.message || 'Failed to delete API key')
+      toast.error('Failed to delete API key')
     }
   }
 
   const handleRevoke = async (id) => {
-    if (!id) {
-      toast.error('Invalid API key ID')
-      return
-    }
-
     try {
       await apiKeysAPI.revoke(id)
       toast.success('API key revoked successfully')
-      await loadApiKeys()
+      loadApiKeys()
     } catch (error) {
       console.error('Failed to revoke API key', error)
-      toast.error(error.message || 'Failed to revoke API key')
+      toast.error('Failed to revoke API key')
     }
   }
 
   const handleActivate = async (id) => {
-    if (!id) {
-      toast.error('Invalid API key ID')
-      return
-    }
-
     try {
       await apiKeysAPI.activate(id)
       toast.success('API key activated successfully')
-      await loadApiKeys()
+      loadApiKeys()
     } catch (error) {
       console.error('Failed to activate API key', error)
-      toast.error(error.message || 'Failed to activate API key')
+      toast.error('Failed to activate API key')
     }
   }
 
@@ -215,14 +194,8 @@ export const ApiKeys = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {(Array.isArray(apiKeys) ? apiKeys : []).map((key) => {
-                    const keyId = key._id || key.id
-                    // Determine if key is active - handle both isActive and is_active fields
-                    const isActive = key.isActive !== undefined 
-                      ? key.isActive 
-                      : (key.is_active !== undefined ? key.is_active : true)
-                    return (
-                    <tr key={keyId} className="hover:bg-gray-50">
+                  {apiKeys.map((key) => (
+                    <tr key={key._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                         {key.name}
                       </td>
@@ -242,7 +215,7 @@ export const ApiKeys = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex gap-1">
-                          {(Array.isArray(key.permissions) ? key.permissions : []).map((perm) => (
+                          {key.permissions.map((perm) => (
                             <Badge key={perm} variant="info" className="text-xs">
                               {perm}
                             </Badge>
@@ -250,7 +223,7 @@ export const ApiKeys = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        {isActive ? (
+                        {key.isActive ? (
                           <Badge variant="success">
                             <CheckCircle size={12} className="mr-1" />
                             Active
@@ -263,48 +236,44 @@ export const ApiKeys = () => {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {key.lastUsed ? safeFormat(key.lastUsed, 'MMM dd, yyyy HH:mm') : 'Never'}
+                        {key.lastUsed ? format(new Date(key.lastUsed), 'MMM dd, yyyy HH:mm') : 'Never'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {key.usageCount || 0}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex gap-2">
-                          {isActive ? (
+                          {key.isActive ? (
                             <Button
                               transparent
-                              onClick={() => handleRevoke(keyId)}
+                              onClick={() => handleRevoke(key._id)}
                               className="text-red-600 hover:text-red-700"
                               type="button"
-                              title="Revoke this API key"
                             >
                               Revoke
                             </Button>
                           ) : (
                             <Button
                               transparent
-                              onClick={() => handleActivate(keyId)}
+                              onClick={() => handleActivate(key._id)}
                               className="text-green-600 hover:text-green-700"
                               type="button"
-                              title="Activate this API key"
                             >
                               Activate
                             </Button>
                           )}
                           <Button
                             transparent
-                            onClick={() => handleDelete(keyId)}
+                            onClick={() => handleDelete(key._id)}
                             className="text-red-600 hover:text-red-700"
                             type="button"
-                            title="Delete this API key"
                           >
                             <Trash2 size={16} />
                           </Button>
                         </div>
                       </td>
                     </tr>
-                    )
-                  })}
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -333,7 +302,7 @@ export const ApiKeys = () => {
                 onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
                 options={[
                   { value: '', label: 'Global (All Organizations)' },
-                  ...(Array.isArray(organizations) ? organizations : []).map(org => ({
+                  ...organizations.map(org => ({
                     value: org._id || org.id,
                     label: org.name,
                   })),

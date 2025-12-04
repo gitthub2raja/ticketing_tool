@@ -7,9 +7,9 @@ import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
 import { Search, Filter, X, Calendar, User, Tag } from 'lucide-react'
+import { format } from 'date-fns'
 import { ticketsAPI, organizationsAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
-import { safeFormat, safeDate } from '../../utils/dateHelpers'
 import toast from 'react-hot-toast'
 
 export const TicketSearch = () => {
@@ -72,24 +72,14 @@ export const TicketSearch = () => {
       }
 
       if (filters.dateFrom) {
-        const fromDate = safeDate(filters.dateFrom)
-        if (fromDate) {
-          filteredData = filteredData.filter(t => {
-            const ticketDate = safeDate(t.createdAt)
-            return ticketDate && ticketDate >= fromDate
-          })
-        }
+        const fromDate = new Date(filters.dateFrom)
+        filteredData = filteredData.filter(t => new Date(t.createdAt) >= fromDate)
       }
 
       if (filters.dateTo) {
-        const toDate = safeDate(filters.dateTo)
-        if (toDate) {
-          toDate.setHours(23, 59, 59)
-          filteredData = filteredData.filter(t => {
-            const ticketDate = safeDate(t.createdAt)
-            return ticketDate && ticketDate <= toDate
-          })
-        }
+        const toDate = new Date(filters.dateTo)
+        toDate.setHours(23, 59, 59)
+        filteredData = filteredData.filter(t => new Date(t.createdAt) <= toDate)
       }
 
       if (filters.assignee !== 'all') {
@@ -372,8 +362,8 @@ export const TicketSearch = () => {
                         {ticket.assignee?.name || <span className="text-gray-400">Unassigned</span>}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                        <div className="font-medium">{safeFormat(ticket.createdAt, 'MMM dd, yyyy')}</div>
-                        <div className="text-xs text-gray-500">{safeFormat(ticket.createdAt, 'HH:mm')}</div>
+                        <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                        <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button

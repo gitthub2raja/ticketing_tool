@@ -8,7 +8,7 @@ import { Textarea } from '../../components/ui/Textarea'
 import { Select } from '../../components/ui/Select'
 import { Modal } from '../../components/ui/Modal'
 import { useAuth } from '../../contexts/AuthContext'
-import { ticketsAPI, categoriesAPI, usersAPI, adminAPI } from '../../services/api'
+import { ticketsAPI, categoriesAPI, usersAPI } from '../../services/api'
 import { sendTicketCreatedEmail } from '../../services/emailService'
 import { Upload, X, File } from 'lucide-react'
 import { format } from 'date-fns'
@@ -27,7 +27,6 @@ export const NewTicket = () => {
   const [categories, setCategories] = useState([])
   const [assignees, setAssignees] = useState([])
   const [showTicketId, setShowTicketId] = useState(false)
-  const [manualTicketIdEnabled, setManualTicketIdEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [selectedFiles, setSelectedFiles] = useState([])
   const navigate = useNavigate()
@@ -35,18 +34,7 @@ export const NewTicket = () => {
   useEffect(() => {
     loadCategories()
     loadAssignees()
-    loadTicketSettings()
   }, [])
-
-  const loadTicketSettings = async () => {
-    try {
-      const settings = await adminAPI.getTicketSettings()
-      setManualTicketIdEnabled(settings.manualTicketId || false)
-      setShowTicketId(settings.manualTicketId || false)
-    } catch (error) {
-      console.error('Failed to load ticket settings:', error)
-    }
-  }
 
   const loadCategories = async () => {
     try {
@@ -173,32 +161,28 @@ export const NewTicket = () => {
           <form onSubmit={handleSubmit} className="space-y-6" noValidate>
             {/* Optional: Manual Ticket ID (for first-time setup) */}
             <div className="mb-4">
-              {manualTicketIdEnabled && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setShowTicketId(!showTicketId)}
-                    className="text-sm text-primary-600 hover:text-primary-700"
-                  >
-                    {showTicketId ? 'Hide' : 'Set'} Manual Ticket ID (Optional)
-                  </button>
-                  {showTicketId && (
-                    <div className="mt-2">
-                      <Input
-                        name="ticketId"
-                        label="Ticket ID (Optional - leave empty for auto-generated)"
-                        placeholder="e.g., 1000"
-                        type="number"
-                        value={formData.ticketId}
-                        onChange={handleChange}
-                        min="1"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        If provided, this will be used as the ticket ID. Otherwise, it will be auto-generated.
-                      </p>
-                    </div>
-                  )}
-                </>
+              <button
+                type="button"
+                onClick={() => setShowTicketId(!showTicketId)}
+                className="text-sm text-primary-600 hover:text-primary-700"
+              >
+                {showTicketId ? 'Hide' : 'Set'} Manual Ticket ID (Optional)
+              </button>
+              {showTicketId && (
+                <div className="mt-2">
+                  <Input
+                    name="ticketId"
+                    label="Ticket ID (Optional - leave empty for auto-increment)"
+                    placeholder="e.g., 1000"
+                    type="number"
+                    value={formData.ticketId}
+                    onChange={handleChange}
+                    min="1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    If provided, this will be used as the ticket ID. Otherwise, it will auto-increment from the highest existing ticket ID.
+                  </p>
+                </div>
               )}
             </div>
 

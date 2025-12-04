@@ -6,7 +6,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Ticket, CheckCircle, Clock, AlertCircle, XCircle, CheckSquare, XSquare, AlertTriangle } from 'lucide-react'
 import { ticketsAPI } from '../../services/api'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 export const DepartmentHeadDashboard = () => {
@@ -52,11 +52,14 @@ export const DepartmentHeadDashboard = () => {
       })
 
       // Load pending tickets for approval - filter by approval-pending status
-      // Backend already filters by department for department-head role
       const allTickets = await ticketsAPI.getAll({ status: 'approval-pending' })
       console.log('Approval pending tickets found:', allTickets.length, allTickets) // Debug log
       
-      setPendingTickets(allTickets.slice(0, 10))
+      // Filter tickets that have a department (department heads only see tickets from their department)
+      const ticketsWithDepartment = allTickets.filter(ticket => ticket.department)
+      console.log('Tickets with department:', ticketsWithDepartment.length) // Debug log
+      
+      setPendingTickets(ticketsWithDepartment.slice(0, 10))
     } catch (error) {
       console.error('Dashboard data error:', error)
       toast.error('Failed to load dashboard data')
@@ -282,8 +285,8 @@ export const DepartmentHeadDashboard = () => {
                             {ticket.creator?.name || 'Unknown'}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                            <div className="font-medium">{safeFormat(ticket.createdAt, 'MMM dd, yyyy')}</div>
-                            <div className="text-xs text-gray-500">{safeFormat(ticket.createdAt, 'HH:mm')}</div>
+                            <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                            <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                             <div className="flex items-center justify-end gap-2">

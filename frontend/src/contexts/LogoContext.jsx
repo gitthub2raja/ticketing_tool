@@ -23,16 +23,6 @@ export const LogoProvider = ({ children }) => {
 
   const loadLogo = async () => {
     try {
-      // Check if user is authenticated before loading logo
-      const token = localStorage.getItem('token')
-      if (!token) {
-        // Not authenticated, use defaults
-        setLogo('/logo.svg')
-        setShowOnLogin(true)
-        setLoading(false)
-        return
-      }
-      
       const response = await adminAPI.getLogo()
       if (response.logo) {
         setLogo(response.logo)
@@ -47,9 +37,9 @@ export const LogoProvider = ({ children }) => {
         setLoginTitle(response.loginTitle)
       }
     } catch (error) {
-      // Silently fail - logo is optional, use defaults
+      console.error('Failed to load logo:', error)
+      // Keep default logo on error
       setLogo('/logo.svg')
-      setShowOnLogin(true)
     } finally {
       setLoading(false)
     }

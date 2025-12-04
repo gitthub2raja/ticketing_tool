@@ -170,26 +170,20 @@ export const Sidebar = ({ isOpen, onClose }) => {
                     />
                   ))}
 
-            {(isAdmin || isDepartmentHead) && (
+            {isAdmin && (
               <>
                 <div className="pt-4 mt-4 border-t" style={{ borderColor: 'rgba(0, 0, 0, 0.08)' }}>
                   <p className="px-4 text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
-                    {isAdmin ? 'Administration' : 'Department Management'}
+                    Administration
                   </p>
                 </div>
-                {isAdmin && adminMenuItems.map((item) => (
+                {adminMenuItems.map((item) => (
                   <NavItem
                     key={item.path}
                     item={item}
                     onClick={() => window.innerWidth < 1024 && onClose()}
                   />
                 ))}
-                {isDepartmentHead && (
-                  <NavItem
-                    item={{ path: '/department-head/dashboard', icon: LayoutDashboard, label: 'Department Dashboard' }}
-                    onClick={() => window.innerWidth < 1024 && onClose()}
-                  />
-                )}
               </>
             )}
           </nav>

@@ -15,7 +15,7 @@ import { emailAutomationAPI, emailTemplatesAPI, organizationsAPI } from '../../s
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { Mail, Plus, Play, Edit, Trash2, CheckCircle, XCircle, Clock } from 'lucide-react'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 
 export const EmailAutomation = () => {
   const { user } = useAuth()
@@ -283,7 +283,7 @@ export const EmailAutomation = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {automation.lastSent
-                          ? safeFormat(automation.lastSent, 'MMM dd, yyyy HH:mm')
+                          ? format(new Date(automation.lastSent), 'MMM dd, yyyy HH:mm')
                           : 'Never'}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

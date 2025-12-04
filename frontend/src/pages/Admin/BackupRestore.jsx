@@ -25,21 +25,9 @@ export const BackupRestore = () => {
     setLoading(true)
     try {
       const response = await adminAPI.listBackups()
-      // Backend returns array directly, not wrapped in {backups: [...]}
-      const backupsList = Array.isArray(response) ? response : (response.backups || [])
-      // Map backend fields to frontend expected fields
-      const mappedBackups = backupsList.map(backup => ({
-        ...backup,
-        timestamp: backup.timestamp || backup.created_at,
-        created_at: backup.created_at || backup.timestamp,
-        collections: backup.collections || [],
-        collectionCounts: backup.collectionCounts || {}
-      }))
-      setBackups(mappedBackups)
+      setBackups(response.backups || [])
     } catch (error) {
-      console.error('Failed to load backups:', error)
       toast.error(error.message || 'Failed to load backups')
-      setBackups([])
     } finally {
       setLoading(false)
     }

@@ -1,22 +1,5 @@
 // API service for all backend calls
-// In development, use the proxy or direct backend URL
-// In production, use relative /api which should be proxied by nginx
-const getApiBaseUrl = () => {
-  // Check if VITE_API_URL is set in environment
-  if (import.meta.env.VITE_API_URL) {
-    return import.meta.env.VITE_API_URL
-  }
-  
-  // In development, try to use the backend directly if we're on localhost
-  if (import.meta.env.DEV && window.location.hostname === 'localhost') {
-    return 'http://localhost:5000/api'
-  }
-  
-  // Default to relative path (works with vite proxy or nginx)
-  return '/api'
-}
-
-const API_BASE_URL = getApiBaseUrl()
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
 
 // Helper function to get auth token
 const getAuthToken = () => {
@@ -36,8 +19,7 @@ const apiCall = async (endpoint, options = {}) => {
   }
 
   try {
-    const url = `${API_BASE_URL}${endpoint}`
-    const response = await fetch(url, {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       ...options,
       headers,
     })
@@ -45,14 +27,11 @@ const apiCall = async (endpoint, options = {}) => {
     if (!response.ok) {
       // Handle 401 Unauthorized - token expired or invalid
       if (response.status === 401) {
-        // Only clear and redirect if we're not already on login page
-        // This prevents redirect loops
-        const currentPath = window.location.pathname
-        if (currentPath !== '/login' && !currentPath.startsWith('/mfa-login')) {
-          // Clear invalid token
-          localStorage.removeItem('token')
-          localStorage.removeItem('user')
-          // Redirect to login
+        // Clear invalid token
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        // Redirect to login if not already there
+        if (window.location.pathname !== '/login') {
           window.location.href = '/login'
         }
         const error = await response.json().catch(() => ({ message: 'Session expired. Please login again.' }))
@@ -60,13 +39,13 @@ const apiCall = async (endpoint, options = {}) => {
       }
       
       const error = await response.json().catch(() => ({ message: 'An error occurred' }))
-      throw new Error(error.message || error.detail || 'Request failed')
+      throw new Error(error.message || 'Request failed')
     }
 
     return response.json()
   } catch (error) {
     // Handle network errors (fetch failures)
-    if (error instanceof TypeError && (error.message.includes('fetch') || error.message.includes('Failed to fetch'))) {
+    if (error instanceof TypeError && error.message.includes('fetch')) {
       throw new Error('Network error: Unable to connect to server. Please check your connection and try again.')
     }
     // Re-throw other errors
@@ -77,36 +56,10 @@ const apiCall = async (endpoint, options = {}) => {
 // Auth API
 export const authAPI = {
   login: async (email, password) => {
-    // Backend expects OAuth2PasswordRequestForm (form data with username/password)
-    const formData = new URLSearchParams()
-    formData.append('username', email)
-    formData.append('password', password)
-    
-    const token = getAuthToken()
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    return apiCall('/auth/login', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      },
-      body: formData.toString(),
+      body: JSON.stringify({ email, password }),
     })
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        if (window.location.pathname !== '/login') {
-          window.location.href = '/login'
-        }
-        const error = await response.json().catch(() => ({ detail: 'Invalid email or password' }))
-        throw new Error(error.detail || 'Invalid email or password')
-      }
-      const error = await response.json().catch(() => ({ detail: 'Request failed' }))
-      throw new Error(error.detail || 'Request failed')
-    }
-
-    return response.json()
   },
   register: async (userData) => {
     return apiCall('/auth/register', {
@@ -129,7 +82,8 @@ export const ticketsAPI = {
     if (filters.organization) params.append('organization', filters.organization)
     
     const query = params.toString()
-    return apiCall(`/tickets/${query ? `?${query}` : ''}`)
+    // Use original tickets endpoint expected by the Node/Express backend
+    return apiCall(`/tickets${query ? `?${query}` : ''}`)
   },
   getById: async (id) => {
     return apiCall(`/tickets/${id}`)
@@ -142,11 +96,10 @@ export const ticketsAPI = {
   },
   createWithFiles: async (formData) => {
     const token = localStorage.getItem('token')
-    const response = await fetch(`${API_BASE_URL}/tickets/`, {
+    const response = await fetch(`${API_BASE_URL}/tickets`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
-        // Don't set Content-Type - let browser set it with boundary for multipart/form-data
       },
       body: formData,
     })
@@ -201,7 +154,7 @@ export const usersAPI = {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
     const query = params.toString()
-    return apiCall(`/users/${query ? `?${query}` : ''}`)
+    return apiCall(`/users${query ? `?${query}` : ''}`)
   },
   getMentions: async () => {
     return apiCall('/users/mentions')
@@ -251,16 +204,16 @@ export const adminAPI = {
       body: JSON.stringify(settings),
     })
   },
-  testSMTP: async (testData = {}) => {
+  testSMTP: async (to, settings) => {
     return apiCall('/email/test-smtp', {
       method: 'POST',
-      body: JSON.stringify(testData),
+      body: JSON.stringify({ to, settings }),
     })
   },
-  testIMAP: async (testData = {}) => {
+  testIMAP: async (settings) => {
     return apiCall('/email/test-imap', {
       method: 'POST',
-      body: JSON.stringify(testData),
+      body: JSON.stringify({ settings }),
     })
   },
   sendTestEmail: async (to, subject, html) => {
@@ -278,17 +231,6 @@ export const adminAPI = {
     return apiCall('/admin/logo', {
       method: 'POST',
       body: JSON.stringify({ logo, filename, showOnLogin, loginTitle }),
-    })
-  },
-  
-  // Ticket Settings
-  getTicketSettings: async () => {
-    return apiCall('/admin/ticket-settings')
-  },
-  updateTicketSettings: async (settings) => {
-    return apiCall('/admin/ticket-settings', {
-      method: 'POST',
-      body: JSON.stringify(settings),
     })
   },
   
@@ -439,7 +381,7 @@ export const adminAPI = {
 // Organizations API
 export const organizationsAPI = {
   getAll: async () => {
-    return apiCall('/organizations/')
+    return apiCall('/organizations')
   },
   getById: async (id) => {
     return apiCall(`/organizations/${id}`)
@@ -466,7 +408,7 @@ export const organizationsAPI = {
 // Categories API
 export const categoriesAPI = {
   getAll: async () => {
-    return apiCall('/categories/')
+    return apiCall('/categories')
   },
   getAllAdmin: async (organization = null) => {
     const params = new URLSearchParams()
@@ -499,7 +441,7 @@ export const categoriesAPI = {
 // Departments API
 export const departmentsAPI = {
   getAll: async () => {
-    return apiCall('/departments/')
+    return apiCall('/departments')
   },
   getById: async (id) => {
     return apiCall(`/departments/${id}`)
@@ -593,10 +535,10 @@ export const apiKeysAPI = {
   getAll: async (organization = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
-    return apiCall(`/api-keys/?${params.toString()}`)
+    return apiCall(`/api-keys?${params.toString()}`)
   },
   create: async (apiKeyData) => {
-    return apiCall('/api-keys/', {
+    return apiCall('/api-keys', {
       method: 'POST',
       body: JSON.stringify(apiKeyData),
     })
@@ -625,39 +567,12 @@ export const apiKeysAPI = {
 }
 
 // Email Templates API (Admin only)
-// Email API (OAuth2 support)
-export const emailAPI = {
-  getOAuth2AuthUrl: async (params) => {
-    const queryParams = new URLSearchParams(params)
-    return apiCall(`/email/oauth2/auth-url?${queryParams.toString()}`)
-  },
-  handleOAuth2Callback: async (callbackData) => {
-    return apiCall('/email/oauth2/callback', {
-      method: 'POST',
-      body: JSON.stringify(callbackData),
-    })
-  },
-  testSMTP: async (testData = {}) => {
-    return apiCall('/email/test-smtp', {
-      method: 'POST',
-      body: JSON.stringify(testData),
-    })
-  },
-  testIMAP: async (testData = {}) => {
-    return apiCall('/email/test-imap', {
-      method: 'POST',
-      body: JSON.stringify(testData),
-    })
-  },
-}
-
 export const emailTemplatesAPI = {
   getAll: async (organization = null, type = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
     if (type) params.append('type', type)
-    const query = params.toString()
-    return apiCall(`/email-templates/${query ? `?${query}` : ''}`)
+    return apiCall(`/email-templates?${params.toString()}`)
   },
   getById: async (id) => {
     return apiCall(`/email-templates/${id}`)
@@ -691,8 +606,7 @@ export const emailAutomationAPI = {
   getAll: async (organization = null) => {
     const params = new URLSearchParams()
     if (organization) params.append('organization', organization)
-    const query = params.toString()
-    return apiCall(`/email-automation/${query ? `?${query}` : ''}`)
+    return apiCall(`/email-automation?${params.toString()}`)
   },
   getById: async (id) => {
     return apiCall(`/email-automation/${id}`)
@@ -783,8 +697,7 @@ export const faqAPI = {
     if (organization) params.append('organization', organization)
     if (category) params.append('category', category)
     if (search) params.append('search', search)
-    const query = params.toString()
-    return apiCall(`/faq/${query ? `?${query}` : ''}`)
+    return apiCall(`/faq?${params.toString()}`)
   },
   getById: async (id) => {
     return apiCall(`/faq/${id}`)

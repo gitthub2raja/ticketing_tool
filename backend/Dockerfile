@@ -1,29 +1,26 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    curl \
-    tzdata \
-    && rm -rf /var/lib/apt/lists/*
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Copy requirements
 COPY requirements.txt .
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install runtime deps (wget used by Docker healthcheck) and Python packages
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends wget \
+    && pip install --no-cache-dir -r requirements.txt \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy application code
-COPY . .
+COPY app ./app
 
-# Create uploads directory
-RUN mkdir -p uploads
-
-# Expose port
 EXPOSE 5000
 
-# Run application
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD python -m http.client localhost:5000 || exit 1
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "5000"]
+
 

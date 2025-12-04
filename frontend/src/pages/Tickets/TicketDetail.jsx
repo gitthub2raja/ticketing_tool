@@ -10,7 +10,7 @@ import { ticketsAPI, usersAPI } from '../../services/api'
 import { sendTicketUpdatedEmail, sendTicketCommentEmail } from '../../services/emailService'
 import { ArrowLeft, User, Clock, MessageSquare, Paperclip, Calendar } from 'lucide-react'
 import { Modal } from '../../components/ui/Modal'
-import { safeFormat, safeDate } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 export const TicketDetail = () => {
@@ -61,21 +61,10 @@ export const TicketDetail = () => {
   const loadTicket = async () => {
     try {
       setLoading(true)
-      if (!id || id === 'undefined') {
-        toast.error('Invalid ticket ID')
-        navigate('/tickets')
-        return
-      }
       const data = await ticketsAPI.getById(id)
-      if (!data) {
-        toast.error('Ticket not found')
-        navigate('/tickets')
-        return
-      }
       setTicket(data)
     } catch (error) {
-      console.error('Failed to load ticket:', error)
-      toast.error(error.message || 'Failed to load ticket')
+      toast.error('Failed to load ticket')
       navigate('/tickets')
     } finally {
       setLoading(false)
@@ -351,45 +340,6 @@ export const TicketDetail = () => {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 mb-2">Description</h2>
                   <p className="text-gray-700 whitespace-pre-wrap">{ticket.description}</p>
-                  
-                  {/* Solution Section - Only for approved/resolved/closed tickets */}
-                  {(ticket.status === 'approved' || ticket.status === 'resolved' || ticket.status === 'closed') && (
-                    <div className="mt-6 pt-6 border-t border-gray-200">
-                      <h2 className="text-lg font-semibold text-gray-900 mb-2">Solution</h2>
-                      {(user?.role === 'admin' || user?.role === 'agent') && ticket.status === 'approved' ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={ticket.solution || ''}
-                            onChange={(e) => {
-                              const updatedTicket = { ...ticket, solution: e.target.value }
-                              setTicket(updatedTicket)
-                            }}
-                            placeholder="Provide a solution for this ticket..."
-                            rows={4}
-                            className="w-full"
-                          />
-                          <Button
-                            onClick={async () => {
-                              try {
-                                const updated = await ticketsAPI.update(id, { solution: ticket.solution })
-                                setTicket(updated)
-                                toast.success('Solution saved successfully!')
-                              } catch (error) {
-                                toast.error('Failed to save solution')
-                              }
-                            }}
-                            className="btn-primary"
-                          >
-                            Save Solution
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <p className="text-gray-700 whitespace-pre-wrap">{ticket.solution || 'No solution provided yet.'}</p>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
               </div>
             </Card>
@@ -407,7 +357,7 @@ export const TicketDetail = () => {
                         <div className="flex items-center space-x-2 mb-2">
                           <span className="font-medium text-gray-900">{comment.author?.name || 'Unknown'}</span>
                           <span className="text-sm text-gray-500">
-                            {safeFormat(comment.createdAt, 'MMM dd, yyyy HH:mm')}
+                            {format(new Date(comment.createdAt), 'MMM dd, yyyy HH:mm')}
                           </span>
                         </div>
                         <p className="text-gray-700 whitespace-pre-wrap">
@@ -539,7 +489,7 @@ export const TicketDetail = () => {
                   {ticket.approvedBy && (
                     <div className="mt-2 text-xs text-gray-500">
                       {ticket.status === 'approved' ? 'Approved' : ticket.status === 'rejected' ? 'Rejected' : ''} by {ticket.approvedBy?.name || 'Unknown'}
-                      {ticket.approvedAt && ` on ${safeFormat(ticket.approvedAt, 'MMM dd, yyyy HH:mm')}`}
+                      {ticket.approvedAt && ` on ${format(new Date(ticket.approvedAt), 'MMM dd, yyyy HH:mm')}`}
                     </div>
                   )}
                   {ticket.rejectionReason && (
@@ -583,7 +533,7 @@ export const TicketDetail = () => {
                       >
                         <span className="flex items-center space-x-2">
                           <Calendar size={16} />
-                          <span>{safeFormat(ticket.dueDate, 'MMM dd, yyyy', 'Select Due Date')}</span>
+                          <span>{ticket.dueDate ? format(new Date(ticket.dueDate), 'MMM dd, yyyy') : 'Select Due Date'}</span>
                         </span>
                         <Calendar size={16} className="opacity-50" />
                       </button>
@@ -638,7 +588,7 @@ export const TicketDetail = () => {
                     <div className="flex items-center space-x-2">
                       <Clock size={16} className="text-gray-400" />
                       <p className="text-gray-900">
-                        {safeFormat(ticket.dueDate, 'MMM dd, yyyy', 'Not set')}
+                        {ticket.dueDate ? format(new Date(ticket.dueDate), 'MMM dd, yyyy') : 'Not set'}
                       </p>
                     </div>
                   )}
@@ -648,7 +598,7 @@ export const TicketDetail = () => {
                   <label className="text-sm font-medium text-gray-500 block mb-2">Created</label>
                   <div className="flex items-center space-x-2">
                     <Clock size={16} className="text-gray-400" />
-                    <p className="text-gray-900">{safeFormat(ticket.createdAt, 'MMM dd, yyyy HH:mm')}</p>
+                    <p className="text-gray-900">{format(new Date(ticket.createdAt), 'MMM dd, yyyy HH:mm')}</p>
                   </div>
                 </div>
 
@@ -656,7 +606,7 @@ export const TicketDetail = () => {
                   <label className="text-sm font-medium text-gray-500 block mb-2">Last Updated</label>
                   <div className="flex items-center space-x-2">
                     <Clock size={16} className="text-gray-400" />
-                    <p className="text-gray-900">{safeFormat(ticket.updatedAt, 'MMM dd, yyyy HH:mm')}</p>
+                    <p className="text-gray-900">{format(new Date(ticket.updatedAt), 'MMM dd, yyyy HH:mm')}</p>
                   </div>
                 </div>
 

@@ -26,35 +26,7 @@ export const Login = () => {
   useEffect(() => {
     const csrfToken = generateCSRFToken()
     setCSRFToken(csrfToken)
-    
-    // Clear rate limit on component mount for development (can be removed in production)
-    // Or add a button to clear rate limit if needed
-    const clearRateLimit = () => {
-      Object.keys(localStorage).forEach(key => {
-        if (key.startsWith('rate_limit_')) {
-          localStorage.removeItem(key)
-        }
-      })
-    }
-    
-    // Auto-clear rate limit after 15 minutes (for development)
-    // In production, you might want to remove this or make it conditional
-    const rateLimitKey = `rate_limit_login_${email}`
-    const attempts = JSON.parse(localStorage.getItem(rateLimitKey) || '[]')
-    const now = Date.now()
-    const recentAttempts = attempts.filter(timestamp => now - timestamp < 15 * 60 * 1000)
-    
-    // If rate limit is active, show option to clear after timeout
-    if (recentAttempts.length >= 5) {
-      const oldestAttempt = Math.min(...recentAttempts)
-      const timeRemaining = 15 * 60 * 1000 - (now - oldestAttempt)
-      if (timeRemaining > 0) {
-        setTimeout(() => {
-          clearRateLimit()
-        }, timeRemaining)
-      }
-    }
-  }, [email])
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -70,40 +42,7 @@ export const Login = () => {
 
     const rateLimit = checkRateLimit(`login_${email}`, 5, 15 * 60 * 1000)
     if (!rateLimit.allowed) {
-      // Calculate time remaining
-      const attempts = JSON.parse(localStorage.getItem(`rate_limit_login_${email}`) || '[]')
-      const now = Date.now()
-      const recentAttempts = attempts.filter(t => now - t < 15 * 60 * 1000)
-      const oldestAttempt = recentAttempts.length > 0 ? Math.min(...recentAttempts) : now
-      const timeRemaining = Math.max(0, Math.ceil((15 * 60 * 1000 - (now - oldestAttempt)) / 1000 / 60))
-      
-      const errorToast = toast.error(
-        `Too many login attempts. Please try again in ${timeRemaining} minutes.`, 
-        {
-          duration: 10000,
-          id: 'rate-limit-error'
-        }
-      )
-      
-      // Add clear button for development
-      setTimeout(() => {
-        toast((t) => (
-          <div className="flex items-center gap-2">
-            <span>Rate limit active. Clear it?</span>
-            <button
-              onClick={() => {
-                localStorage.removeItem(`rate_limit_login_${email}`)
-                toast.dismiss(t.id)
-                toast.success('Rate limit cleared! You can try again now.', { id: 'rate-limit-cleared' })
-              }}
-              className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-            >
-              Clear Now
-            </button>
-          </div>
-        ), { duration: 15000, id: 'rate-limit-clear' })
-      }, 1000)
-      
+      toast.error('Too many login attempts. Please try again in 15 minutes.')
       setLoading(false)
       return
     }
@@ -296,7 +235,7 @@ export const Login = () => {
                 <button
                   type="submit"
                   disabled={loading}
-                  onClick={() => playClick()}
+                  onClick={() => playSound('click')}
                   className="w-full px-6 py-3.5 bg-primary-600/90 backdrop-blur-md border border-primary-500/50 text-white rounded-xl font-semibold text-base shadow-lg shadow-primary-500/30 hover:bg-primary-600 hover:shadow-xl hover:shadow-primary-500/40 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 relative overflow-hidden group"
                 >
                   {/* Button glow effect */}

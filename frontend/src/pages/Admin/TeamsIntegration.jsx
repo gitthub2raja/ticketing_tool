@@ -14,7 +14,7 @@ import { teamsAPI, organizationsAPI, departmentsAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { MessageSquare, CheckCircle, XCircle, Save, Play, Info } from 'lucide-react'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 
 export const TeamsIntegration = () => {
   const { user } = useAuth()
@@ -569,7 +569,7 @@ export const TeamsIntegration = () => {
 
             {config?.lastTested && (
               <div className="text-sm text-gray-600">
-                Last tested: {safeFormat(config.lastTested, 'MMM dd, yyyy HH:mm')}
+                Last tested: {format(new Date(config.lastTested), 'MMM dd, yyyy HH:mm')}
               </div>
             )}
 

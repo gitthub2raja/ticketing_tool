@@ -4,8 +4,8 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
-import { Mail, Server, Lock, Send, Key, ExternalLink } from 'lucide-react'
-import { adminAPI, emailAPI } from '../../services/api'
+import { Mail, Server, Lock, Send } from 'lucide-react'
+import { adminAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
@@ -14,42 +14,26 @@ export const EmailSettings = () => {
   const [smtpSettings, setSmtpSettings] = useState({
     host: '',
     port: '587',
-    encryption: 'TLS',
-    authMethod: 'password', // 'password' or 'oauth2'
+    encryption: 'tls',
     username: '',
     password: '',
     fromEmail: '',
     fromName: 'Ticketing Tool',
-    // OAuth2 fields
-    oauth2Provider: 'microsoft', // 'microsoft' or 'google'
-    oauth2ClientId: '',
-    oauth2ClientSecret: '',
-    oauth2TenantId: '',
-    oauth2Authorized: false,
   })
 
   const [imapSettings, setImapSettings] = useState({
     host: '',
     port: '993',
-    encryption: 'SSL',
-    authMethod: 'password', // 'password' or 'oauth2'
+    encryption: 'ssl',
     username: '',
     password: '',
     folder: 'INBOX',
-    // OAuth2 fields
-    oauth2Provider: 'microsoft',
-    oauth2ClientId: '',
-    oauth2ClientSecret: '',
-    oauth2TenantId: '',
-    oauth2Authorized: false,
   })
 
   const [testEmail, setTestEmail] = useState(user?.email || '')
   const [loading, setLoading] = useState(false)
   const [testingSMTP, setTestingSMTP] = useState(false)
   const [testingIMAP, setTestingIMAP] = useState(false)
-  const [authorizingOAuth2, setAuthorizingOAuth2] = useState({ smtp: false, imap: false })
-  const [settingsSaved, setSettingsSaved] = useState({ smtp: false, imap: false })
 
   useEffect(() => {
     loadSettings()
@@ -60,58 +44,46 @@ export const EmailSettings = () => {
       const settings = await adminAPI.getEmailSettings()
       
       if (settings.smtp) {
-        const authMethod = settings.smtp.authMethod || 'password'
-        const oauth2 = settings.smtp.auth?.oauth2 || {}
+        // Determine encryption based on secure flag and port
+        let encryption = 'none'
+        if (settings.smtp.secure) {
+          encryption = settings.smtp.port === 465 ? 'ssl' : 'tls'
+        } else if (settings.smtp.port === 587 || settings.smtp.port === 465) {
+          // If port is 587 or 465, default to TLS/SSL even if secure flag is false
+          encryption = settings.smtp.port === 465 ? 'ssl' : 'tls'
+        }
         
-        // Determine encryption
-        let encryption = settings.smtp.encryption || 'TLS'
-        if (!encryption && settings.smtp.secure !== undefined) {
-          encryption = settings.smtp.secure ? (settings.smtp.port === 465 ? 'SSL' : 'TLS') : 'None'
+        // Auto-detect Office365 and force TLS
+        const isOffice365 = settings.smtp.host && (
+          settings.smtp.host.includes('office365.com') || 
+          settings.smtp.host.includes('outlook.com')
+        )
+        if (isOffice365 && encryption === 'none') {
+          encryption = 'tls'
         }
         
         setSmtpSettings({
           host: settings.smtp.host || '',
           port: settings.smtp.port?.toString() || '587',
           encryption: encryption,
-          authMethod: authMethod,
           username: settings.smtp.auth?.user || '',
-          password: '', // Don't load password
+          password: settings.smtp.auth?.pass || '',
           fromEmail: settings.smtp.fromEmail || settings.smtp.auth?.user || '',
           fromName: settings.smtp.fromName || 'Ticketing Tool',
-          oauth2Provider: oauth2.provider || 'microsoft',
-          oauth2ClientId: oauth2.clientId || '',
-          oauth2ClientSecret: oauth2.clientSecret || '',
-          oauth2TenantId: oauth2.tenantId || '',
-          oauth2Authorized: !!(oauth2.accessToken && oauth2.refreshToken),
         })
-        setSettingsSaved(prev => ({ ...prev, smtp: true }))
       }
 
       if (settings.imap) {
-        const authMethod = settings.imap.authMethod || 'password'
-        const oauth2 = settings.imap.auth?.oauth2 || {}
-        
-        // Determine encryption
-        let encryption = settings.imap.encryption || 'SSL'
-        if (!encryption && settings.imap.secure !== undefined) {
-          encryption = settings.imap.secure ? 'SSL' : 'None'
-        }
+        const encryption = settings.imap.secure ? 'ssl' : 'none'
         
         setImapSettings({
           host: settings.imap.host || '',
           port: settings.imap.port?.toString() || '993',
           encryption: encryption,
-          authMethod: authMethod,
           username: settings.imap.auth?.user || '',
-          password: '', // Don't load password
+          password: settings.imap.auth?.pass || '',
           folder: settings.imap.folder || 'INBOX',
-          oauth2Provider: oauth2.provider || 'microsoft',
-          oauth2ClientId: oauth2.clientId || '',
-          oauth2ClientSecret: oauth2.clientSecret || '',
-          oauth2TenantId: oauth2.tenantId || '',
-          oauth2Authorized: !!(oauth2.accessToken && oauth2.refreshToken),
         })
-        setSettingsSaved(prev => ({ ...prev, imap: true }))
       }
     } catch (error) {
       console.error('Failed to load email settings:', error)
@@ -122,31 +94,8 @@ export const EmailSettings = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const smtpData = {
-        enabled: true,
-        host: smtpSettings.host,
-        port: parseInt(smtpSettings.port),
-        encryption: smtpSettings.encryption,
-        authMethod: smtpSettings.authMethod,
-        auth: smtpSettings.authMethod === 'oauth2' ? {
-          oauth2: {
-            provider: smtpSettings.oauth2Provider,
-            clientId: smtpSettings.oauth2ClientId,
-            clientSecret: smtpSettings.oauth2ClientSecret,
-            tenantId: smtpSettings.oauth2TenantId,
-          }
-        } : {
-          user: smtpSettings.username,
-          pass: smtpSettings.password,
-        },
-        fromEmail: smtpSettings.fromEmail,
-        fromName: smtpSettings.fromName,
-      }
-      
-      await adminAPI.updateEmailSettings({ smtp: smtpData })
+      await adminAPI.updateEmailSettings({ smtp: smtpSettings })
       toast.success('SMTP settings saved successfully!')
-      setSettingsSaved(prev => ({ ...prev, smtp: true }))
-      await loadSettings() // Reload to get updated OAuth2 status
     } catch (error) {
       toast.error(error.message || 'Failed to save SMTP settings')
     } finally {
@@ -158,64 +107,12 @@ export const EmailSettings = () => {
     e.preventDefault()
     setLoading(true)
     try {
-      const imapData = {
-        enabled: true,
-        host: imapSettings.host,
-        port: parseInt(imapSettings.port),
-        encryption: imapSettings.encryption,
-        authMethod: imapSettings.authMethod,
-        auth: imapSettings.authMethod === 'oauth2' ? {
-          oauth2: {
-            provider: imapSettings.oauth2Provider,
-            clientId: imapSettings.oauth2ClientId,
-            clientSecret: imapSettings.oauth2ClientSecret,
-            tenantId: imapSettings.oauth2TenantId,
-          }
-        } : {
-          user: imapSettings.username,
-          pass: imapSettings.password,
-        },
-        folder: imapSettings.folder,
-      }
-      
-      await adminAPI.updateEmailSettings({ imap: imapData })
+      await adminAPI.updateEmailSettings({ imap: imapSettings })
       toast.success('IMAP settings saved successfully!')
-      setSettingsSaved(prev => ({ ...prev, imap: true }))
-      await loadSettings() // Reload to get updated OAuth2 status
     } catch (error) {
       toast.error(error.message || 'Failed to save IMAP settings')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const handleOAuth2Authorize = async (type) => {
-    const settings = type === 'smtp' ? smtpSettings : imapSettings
-    const provider = settings.oauth2Provider
-    
-    if (!settings.oauth2ClientId || (provider === 'microsoft' && !settings.oauth2TenantId)) {
-      toast.error(`Please configure ${provider === 'microsoft' ? 'Client ID and Tenant ID' : 'Client ID'} first`)
-      return
-    }
-
-    setAuthorizingOAuth2({ ...authorizingOAuth2, [type]: true })
-    try {
-      const redirectUri = `${window.location.origin}/admin/email/oauth2/callback?type=${type}&provider=${provider}`
-      const response = await emailAPI.getOAuth2AuthUrl({
-        provider,
-        type,
-        redirectUri,
-      })
-      
-      // Store OAuth2 state in localStorage for callback
-      localStorage.setItem('oauth2_redirect', JSON.stringify({ type, provider, redirectUri }))
-      
-      // Redirect to OAuth2 authorization
-      window.location.href = response.authUrl
-      
-    } catch (error) {
-      toast.error(error.message || 'Failed to get OAuth2 authorization URL')
-      setAuthorizingOAuth2({ ...authorizingOAuth2, [type]: false })
     }
   }
 
@@ -225,118 +122,100 @@ export const EmailSettings = () => {
       return
     }
 
-    // Check if SMTP settings are saved first
-    if (!smtpSettings.host || !smtpSettings.port) {
-      toast.error('Please configure SMTP Host and Port before testing')
+    if (!smtpSettings.host || !smtpSettings.username || !smtpSettings.password) {
+      toast.error('Please fill in all required SMTP fields before testing')
       return
     }
 
-    if (smtpSettings.authMethod === 'password') {
-      // If settings are already saved, backend will use saved password
-      // Only require password if settings haven't been saved yet
-      if (!settingsSaved.smtp) {
-        if (!smtpSettings.username || !smtpSettings.password) {
-          toast.error('Please fill in Username and Password, then save settings before testing')
-          return
-        }
-        // Save settings first if not saved
-        try {
-          const smtpData = {
-            enabled: true,
-            host: smtpSettings.host,
-            port: parseInt(smtpSettings.port),
-            encryption: smtpSettings.encryption,
-            authMethod: 'password',
-            auth: {
-              user: smtpSettings.username,
-              pass: smtpSettings.password,
-            },
-            fromEmail: smtpSettings.fromEmail,
-            fromName: smtpSettings.fromName,
-          }
-          await adminAPI.updateEmailSettings({ smtp: smtpData })
-          setSettingsSaved(prev => ({ ...prev, smtp: true }))
-          toast.success('Settings saved. Testing connection...')
-        } catch (error) {
-          toast.error('Failed to save SMTP settings: ' + (error.message || 'Unknown error'))
-          return
-        }
-      } else if (!smtpSettings.username) {
-        toast.error('Please fill in Username before testing')
+    // Validate Office365 settings
+    const isOffice365 = smtpSettings.host && (
+      smtpSettings.host.includes('office365.com') || 
+      smtpSettings.host.includes('outlook.com')
+    )
+    
+    if (isOffice365) {
+      if (smtpSettings.encryption !== 'tls') {
+        toast.error('Office365 requires TLS encryption. Please change Encryption to TLS.', { duration: 6000 })
         return
       }
-      // If settings are saved, backend will use saved password from database
-    } else {
-      if (!smtpSettings.oauth2Authorized) {
-        toast.error('Please authorize OAuth2 first before testing')
+      if (smtpSettings.port !== '587') {
+        toast.error('Office365 requires port 587 with TLS. Please change Port to 587.', { duration: 6000 })
         return
       }
     }
 
     setTestingSMTP(true)
     try {
-      const result = await emailAPI.testSMTP({ to: testEmail })
-      toast.success(result.message || 'Test email sent successfully! Please check your inbox (and spam folder).')
+      // Convert settings to backend format
+      // For Office365, secure should be false (uses STARTTLS, not direct SSL)
+      const secure = smtpSettings.encryption === 'ssl' && smtpSettings.port === '465'
+      
+      const settings = {
+        host: smtpSettings.host,
+        port: smtpSettings.port,
+        secure: secure,
+        auth: {
+          user: smtpSettings.username,
+          pass: smtpSettings.password,
+        },
+        fromEmail: smtpSettings.fromEmail,
+        fromName: smtpSettings.fromName,
+      }
+
+      const result = await adminAPI.testSMTP(testEmail, settings)
+      toast.success(result.message || 'Test email sent successfully! Please check your inbox.')
     } catch (error) {
-      toast.error(error.message || 'Failed to send test email')
+      // Show detailed error message
+      const errorMessage = error.message || 'Failed to send test email. Please check your SMTP settings.'
+      
+      // Check if it's an Office365 authentication error
+      if (errorMessage.includes('535') || errorMessage.includes('Authentication unsuccessful') || errorMessage.includes('EAUTH')) {
+        const detailedError = errorMessage.split('\n').join(' | ')
+        toast.error(
+          'Office365 Authentication Failed! ' +
+          'Please verify: 1) App Password is 16 characters (no spaces), 2) SMTP AUTH enabled for your mailbox, 3) Try creating a new App Password',
+          { duration: 12000 }
+        )
+        console.error('Detailed error:', detailedError)
+        
+        // Show additional help in console
+        console.log('Office365 Troubleshooting:')
+        console.log('1. App Password should be exactly 16 characters')
+        console.log('2. No spaces before or after the password')
+        console.log('3. SMTP AUTH must be enabled: Set-CASMailbox -Identity "your-email" -SmtpClientAuthenticationDisabled $false')
+        console.log('4. Try creating a new App Password from Microsoft Account Security')
+      } else {
+        toast.error(errorMessage, { duration: 6000 })
+      }
     } finally {
       setTestingSMTP(false)
     }
   }
 
   const handleTestIMAP = async () => {
-    if (!imapSettings.host || !imapSettings.port) {
-      toast.error('Please configure IMAP Host and Port before testing')
+    if (!imapSettings.host || !imapSettings.username || !imapSettings.password) {
+      toast.error('Please fill in all required IMAP fields before testing')
       return
-    }
-
-    if (imapSettings.authMethod === 'password') {
-      // If settings are already saved, backend will use saved password
-      // Only require password if settings haven't been saved yet
-      if (!settingsSaved.imap) {
-        if (!imapSettings.username || !imapSettings.password) {
-          toast.error('Please fill in Username and Password, then save settings before testing')
-          return
-        }
-        // Save settings first if not saved
-        try {
-          const imapData = {
-            enabled: true,
-            host: imapSettings.host,
-            port: parseInt(imapSettings.port),
-            encryption: imapSettings.encryption,
-            authMethod: 'password',
-            auth: {
-              user: imapSettings.username,
-              pass: imapSettings.password,
-            },
-            folder: imapSettings.folder || 'INBOX',
-          }
-          await adminAPI.updateEmailSettings({ imap: imapData })
-          setSettingsSaved(prev => ({ ...prev, imap: true }))
-          toast.success('Settings saved. Testing connection...')
-        } catch (error) {
-          toast.error('Failed to save IMAP settings: ' + (error.message || 'Unknown error'))
-          return
-        }
-      } else if (!imapSettings.username) {
-        toast.error('Please fill in Username before testing')
-        return
-      }
-      // If settings are saved, backend will use saved password from database
-    } else {
-      if (!imapSettings.oauth2Authorized) {
-        toast.error('Please authorize OAuth2 first before testing')
-        return
-      }
     }
 
     setTestingIMAP(true)
     try {
-      await emailAPI.testIMAP({})
-      toast.success('IMAP connection successful!')
+      // Convert settings to backend format
+      const settings = {
+        host: imapSettings.host,
+        port: imapSettings.port,
+        secure: imapSettings.encryption === 'ssl' || imapSettings.encryption === 'tls',
+        auth: {
+          user: imapSettings.username,
+          pass: imapSettings.password,
+        },
+        folder: imapSettings.folder || 'INBOX',
+      }
+
+      const result = await adminAPI.testIMAP(settings)
+      toast.success(result.message || 'IMAP connection successful!')
     } catch (error) {
-      toast.error(error.message || 'Failed to connect to IMAP server')
+      toast.error(error.message || 'Failed to connect to IMAP server. Please check your IMAP settings.')
     } finally {
       setTestingIMAP(false)
     }
@@ -378,154 +257,38 @@ export const EmailSettings = () => {
               value={smtpSettings.encryption}
               onChange={(e) => setSmtpSettings({ ...smtpSettings, encryption: e.target.value })}
               options={[
-                { value: 'None', label: 'None' },
-                { value: 'TLS', label: 'TLS (Required for Office365)' },
-                { value: 'SSL', label: 'SSL' },
+                { value: 'none', label: 'None' },
+                { value: 'tls', label: 'TLS (Required for Office365)' },
+                { value: 'ssl', label: 'SSL' },
               ]}
               required
             />
-
-            <Select
-              label="Authentication Method *"
-              value={smtpSettings.authMethod}
-              onChange={(e) => setSmtpSettings({ ...smtpSettings, authMethod: e.target.value })}
-              options={[
-                { value: 'password', label: 'Password / App Password' },
-                { value: 'oauth2', label: 'OAuth2 (Recommended for Shared Mailboxes)' },
-              ]}
-              required
-            />
-
-            {smtpSettings.authMethod === 'password' ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Username *"
-                    value={smtpSettings.username}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, username: e.target.value })}
-                    required
-                    icon={<Mail size={20} />}
-                    placeholder="your-email@example.com"
-                  />
-
-                  <Input
-                    type="password"
-                    label="Password / App Password *"
-                    value={smtpSettings.password}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, password: e.target.value })}
-                    required
-                    icon={<Lock size={20} />}
-                    placeholder={smtpSettings.host?.includes('office365.com') ? 'Use App Password for Office365' : ''}
-                  />
-                </div>
-                {(smtpSettings.host?.includes('gmail.com') || smtpSettings.username?.includes('@gmail.com')) && (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
-                    <p className="font-medium mb-1">⚠️ Gmail requires App Password:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-xs">
-                      <li>Enable 2-Step Verification in your Google Account</li>
-                      <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener noreferrer" className="underline">Google App Passwords</a></li>
-                      <li>Generate an App Password for "Mail"</li>
-                      <li>Use the 16-character App Password (not your regular password)</li>
-                    </ol>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-blue-900">OAuth2 Configuration</p>
-                      <p className="text-sm text-blue-700">Perfect for shared mailboxes - no password needed!</p>
-                    </div>
-                    {smtpSettings.oauth2Authorized && (
-                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                        ✓ Authorized
-                      </span>
-                    )}
-                  </div>
-
-                  <Select
-                    label="OAuth2 Provider *"
-                    value={smtpSettings.oauth2Provider}
-                    onChange={(e) => setSmtpSettings({ ...smtpSettings, oauth2Provider: e.target.value })}
-                    options={[
-                      { value: 'microsoft', label: 'Microsoft 365' },
-                      { value: 'google', label: 'Google Workspace' },
-                    ]}
-                    required
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      label="Client ID *"
-                      value={smtpSettings.oauth2ClientId}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, oauth2ClientId: e.target.value })}
-                      required
-                      icon={<Key size={20} />}
-                      placeholder="Your OAuth2 Client ID"
-                    />
-
-                    <Input
-                      type="password"
-                      label="Client Secret *"
-                      value={smtpSettings.oauth2ClientSecret}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, oauth2ClientSecret: e.target.value })}
-                      required
-                      icon={<Lock size={20} />}
-                      placeholder="Your OAuth2 Client Secret"
-                    />
-                  </div>
-
-                  {smtpSettings.oauth2Provider === 'microsoft' && (
-                    <Input
-                      label="Tenant ID *"
-                      value={smtpSettings.oauth2TenantId}
-                      onChange={(e) => setSmtpSettings({ ...smtpSettings, oauth2TenantId: e.target.value })}
-                      required
-                      icon={<Key size={20} />}
-                      placeholder="Your Azure AD Tenant ID"
-                    />
-                  )}
-
-                  <div className="flex items-center space-x-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleOAuth2Authorize('smtp')}
-                      disabled={authorizingOAuth2.smtp || !smtpSettings.oauth2ClientId}
-                    >
-                      <ExternalLink size={16} className="mr-2" />
-                      {authorizingOAuth2.smtp ? 'Authorizing...' : smtpSettings.oauth2Authorized ? 'Re-authorize' : 'Authorize OAuth2'}
-                    </Button>
-                    {smtpSettings.oauth2Authorized && (
-                      <span className="text-sm text-green-600">✓ OAuth2 tokens configured</span>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-blue-700 bg-blue-100 p-3 rounded">
-                    <p className="font-medium mb-1">OAuth2 Setup Instructions:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      {smtpSettings.oauth2Provider === 'microsoft' ? (
-                        <>
-                          <li>Register app in <a href="https://portal.azure.com" target="_blank" rel="noopener noreferrer" className="underline">Azure AD</a></li>
-                          <li>Add redirect URI: <code className="bg-blue-200 px-1 rounded">{window.location.origin}/admin/email/oauth2/callback</code></li>
-                          <li>Copy Client ID, Client Secret, and Tenant ID</li>
-                          <li>Click "Authorize OAuth2" to complete setup</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>Create OAuth2 credentials in <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
-                          <li>Add redirect URI: <code className="bg-blue-200 px-1 rounded">{window.location.origin}/admin/email/oauth2/callback</code></li>
-                          <li>Copy Client ID and Client Secret</li>
-                          <li>Click "Authorize OAuth2" to complete setup</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              </>
+            {smtpSettings.host && (smtpSettings.host.includes('office365.com') || smtpSettings.host.includes('outlook.com')) && smtpSettings.encryption === 'none' && (
+              <div className="p-3 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                <p className="font-medium">⚠️ Office365 requires TLS encryption!</p>
+                <p>Please change Encryption to "TLS" for Office365 to work properly.</p>
+              </div>
             )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Username *"
+                value={smtpSettings.username}
+                onChange={(e) => setSmtpSettings({ ...smtpSettings, username: e.target.value })}
+                required
+                icon={<Mail size={20} />}
+                placeholder="your-email@example.com"
+              />
+
+              <Input
+                type="password"
+                label="Password *"
+                value={smtpSettings.password}
+                onChange={(e) => setSmtpSettings({ ...smtpSettings, password: e.target.value })}
+                required
+                icon={<Lock size={20} />}
+              />
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
@@ -572,6 +335,18 @@ export const EmailSettings = () => {
               <p className="text-xs text-gray-600 mt-2">
                 Enter your email address and click "Send Test Email" to verify your SMTP configuration.
               </p>
+              {(smtpSettings.host && (smtpSettings.host.includes('office365.com') || smtpSettings.host.includes('outlook.com'))) && (
+                <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                  <p className="font-medium mb-1">⚠️ Office365 Authentication Requirements:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Use an <strong>App Password</strong> (not your regular password) if MFA is enabled</li>
+                    <li>Copy the App Password exactly (no spaces before/after)</li>
+                    <li>Make sure SMTP AUTH is enabled in your Office365 admin center</li>
+                    <li>Port 587 with TLS is required for Office365</li>
+                  </ul>
+                  <p className="mt-2">Create App Password: <a href="https://account.microsoft.com/security" target="_blank" rel="noopener noreferrer" className="underline font-medium">Microsoft Account Security</a> → App passwords</p>
+                </div>
+              )}
             </div>
 
             <div className="flex space-x-3 pt-4">
@@ -610,142 +385,32 @@ export const EmailSettings = () => {
               value={imapSettings.encryption}
               onChange={(e) => setImapSettings({ ...imapSettings, encryption: e.target.value })}
               options={[
-                { value: 'None', label: 'None' },
-                { value: 'SSL', label: 'SSL' },
-                { value: 'TLS', label: 'TLS' },
+                { value: 'none', label: 'None' },
+                { value: 'ssl', label: 'SSL' },
+                { value: 'tls', label: 'TLS' },
               ]}
               required
             />
 
-            <Select
-              label="Authentication Method *"
-              value={imapSettings.authMethod}
-              onChange={(e) => setImapSettings({ ...imapSettings, authMethod: e.target.value })}
-              options={[
-                { value: 'password', label: 'Password / App Password' },
-                { value: 'oauth2', label: 'OAuth2 (Recommended for Shared Mailboxes)' },
-              ]}
-              required
-            />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Input
+                label="Username *"
+                value={imapSettings.username}
+                onChange={(e) => setImapSettings({ ...imapSettings, username: e.target.value })}
+                required
+                icon={<Mail size={20} />}
+                placeholder="your-email@example.com"
+              />
 
-            {imapSettings.authMethod === 'password' ? (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input
-                    label="Username *"
-                    value={imapSettings.username}
-                    onChange={(e) => setImapSettings({ ...imapSettings, username: e.target.value })}
-                    required
-                    icon={<Mail size={20} />}
-                    placeholder="your-email@example.com"
-                  />
-
-                  <Input
-                    type="password"
-                    label="Password *"
-                    value={imapSettings.password}
-                    onChange={(e) => setImapSettings({ ...imapSettings, password: e.target.value })}
-                    required
-                    icon={<Lock size={20} />}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-blue-900">OAuth2 Configuration</p>
-                      <p className="text-sm text-blue-700">Perfect for shared mailboxes - no password needed!</p>
-                    </div>
-                    {imapSettings.oauth2Authorized && (
-                      <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
-                        ✓ Authorized
-                      </span>
-                    )}
-                  </div>
-
-                  <Select
-                    label="OAuth2 Provider *"
-                    value={imapSettings.oauth2Provider}
-                    onChange={(e) => setImapSettings({ ...imapSettings, oauth2Provider: e.target.value })}
-                    options={[
-                      { value: 'microsoft', label: 'Microsoft 365' },
-                      { value: 'google', label: 'Google Workspace' },
-                    ]}
-                    required
-                  />
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Input
-                      label="Client ID *"
-                      value={imapSettings.oauth2ClientId}
-                      onChange={(e) => setImapSettings({ ...imapSettings, oauth2ClientId: e.target.value })}
-                      required
-                      icon={<Key size={20} />}
-                      placeholder="Your OAuth2 Client ID"
-                    />
-
-                    <Input
-                      type="password"
-                      label="Client Secret *"
-                      value={imapSettings.oauth2ClientSecret}
-                      onChange={(e) => setImapSettings({ ...imapSettings, oauth2ClientSecret: e.target.value })}
-                      required
-                      icon={<Lock size={20} />}
-                      placeholder="Your OAuth2 Client Secret"
-                    />
-                  </div>
-
-                  {imapSettings.oauth2Provider === 'microsoft' && (
-                    <Input
-                      label="Tenant ID *"
-                      value={imapSettings.oauth2TenantId}
-                      onChange={(e) => setImapSettings({ ...imapSettings, oauth2TenantId: e.target.value })}
-                      required
-                      icon={<Key size={20} />}
-                      placeholder="Your Azure AD Tenant ID"
-                    />
-                  )}
-
-                  <div className="flex items-center space-x-3">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => handleOAuth2Authorize('imap')}
-                      disabled={authorizingOAuth2.imap || !imapSettings.oauth2ClientId}
-                    >
-                      <ExternalLink size={16} className="mr-2" />
-                      {authorizingOAuth2.imap ? 'Authorizing...' : imapSettings.oauth2Authorized ? 'Re-authorize' : 'Authorize OAuth2'}
-                    </Button>
-                    {imapSettings.oauth2Authorized && (
-                      <span className="text-sm text-green-600">✓ OAuth2 tokens configured</span>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-blue-700 bg-blue-100 p-3 rounded">
-                    <p className="font-medium mb-1">OAuth2 Setup Instructions:</p>
-                    <ul className="list-disc list-inside space-y-1">
-                      {imapSettings.oauth2Provider === 'microsoft' ? (
-                        <>
-                          <li>Register app in <a href="https://portal.azure.com" target="_blank" rel="noopener noreferrer" className="underline">Azure AD</a></li>
-                          <li>Add redirect URI: <code className="bg-blue-200 px-1 rounded">{window.location.origin}/admin/email/oauth2/callback</code></li>
-                          <li>Copy Client ID, Client Secret, and Tenant ID</li>
-                          <li>Click "Authorize OAuth2" to complete setup</li>
-                        </>
-                      ) : (
-                        <>
-                          <li>Create OAuth2 credentials in <a href="https://console.cloud.google.com" target="_blank" rel="noopener noreferrer" className="underline">Google Cloud Console</a></li>
-                          <li>Add redirect URI: <code className="bg-blue-200 px-1 rounded">{window.location.origin}/admin/email/oauth2/callback</code></li>
-                          <li>Copy Client ID and Client Secret</li>
-                          <li>Click "Authorize OAuth2" to complete setup</li>
-                        </>
-                      )}
-                    </ul>
-                  </div>
-                </div>
-              </>
-            )}
+              <Input
+                type="password"
+                label="Password *"
+                value={imapSettings.password}
+                onChange={(e) => setImapSettings({ ...imapSettings, password: e.target.value })}
+                required
+                icon={<Lock size={20} />}
+              />
+            </div>
 
             <Input
               label="Folder"

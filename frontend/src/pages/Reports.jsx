@@ -9,7 +9,6 @@ import { Download, FileText } from 'lucide-react'
 import { ticketsAPI, organizationsAPI } from '../services/api'
 import { useAuth } from '../contexts/AuthContext'
 import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns'
-import { safeFormat, safeDate, isOverdue as checkOverdue } from '../utils/dateHelpers'
 import toast from 'react-hot-toast'
 
 export const Reports = () => {
@@ -97,8 +96,8 @@ export const Reports = () => {
       
       if (dateRange) {
         const filtered = allTickets.filter(ticket => {
-          const ticketDate = safeDate(ticket.createdAt)
-          return ticketDate && ticketDate >= dateRange.from && ticketDate <= dateRange.to
+          const ticketDate = new Date(ticket.createdAt)
+          return ticketDate >= dateRange.from && ticketDate <= dateRange.to
         })
         setTickets(filtered)
       } else {
@@ -122,8 +121,8 @@ export const Reports = () => {
       ticket.priority,
       ticket.status,
       ticket.assignee?.name || 'Unassigned',
-      safeFormat(ticket.createdAt, 'yyyy-MM-dd HH:mm'),
-      safeFormat(ticket.dueDate, 'yyyy-MM-dd HH:mm', 'N/A'),
+      format(new Date(ticket.createdAt), 'yyyy-MM-dd HH:mm'),
+      ticket.dueDate ? format(new Date(ticket.dueDate), 'yyyy-MM-dd HH:mm') : 'N/A',
       ticket.organization?.name || 'N/A',
     ])
 
@@ -156,8 +155,8 @@ export const Reports = () => {
           <td>${ticket.priority}</td>
           <td>${ticket.status}</td>
           <td>${ticket.assignee?.name || 'Unassigned'}</td>
-          <td>${safeFormat(ticket.createdAt, 'MMM dd, yyyy HH:mm')}</td>
-          <td>${safeFormat(ticket.dueDate, 'MMM dd, yyyy HH:mm', 'N/A')}</td>
+          <td>${format(new Date(ticket.createdAt), 'MMM dd, yyyy HH:mm')}</td>
+          <td>${ticket.dueDate ? format(new Date(ticket.dueDate), 'MMM dd, yyyy HH:mm') : 'N/A'}</td>
         </tr>
       `).join('')
 
@@ -396,7 +395,7 @@ export const Reports = () => {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {tickets.map((ticket, index) => {
-                    const ticketIsOverdue = checkOverdue(ticket.dueDate, ticket.status)
+                    const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && (ticket.status === 'open' || ticket.status === 'in-progress')
                     return (
                       <tr 
                         key={ticket._id}
@@ -426,18 +425,18 @@ export const Reports = () => {
                           {ticket.assignee?.name || <span className="text-gray-400">Unassigned</span>}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                          <div className="font-medium">{safeFormat(ticket.createdAt, 'MMM dd, yyyy')}</div>
-                          <div className="text-xs text-gray-500">{safeFormat(ticket.createdAt, 'HH:mm')}</div>
+                          <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                          <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm">
                           {ticket.dueDate ? (
                             <div>
-                              <div className={ticketIsOverdue ? 'text-red-600 font-medium' : 'text-gray-700'}>
-                                {safeFormat(ticket.dueDate, 'MMM dd, yyyy')}
-                                {ticketIsOverdue && <span className="ml-1 text-red-600">⚠</span>}
+                              <div className={isOverdue ? 'text-red-600 font-medium' : 'text-gray-700'}>
+                                {format(new Date(ticket.dueDate), 'MMM dd, yyyy')}
+                                {isOverdue && <span className="ml-1 text-red-600">⚠</span>}
                               </div>
-                              <div className={`text-xs ${ticketIsOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                                {safeFormat(ticket.dueDate, 'HH:mm')}
+                              <div className={`text-xs ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                                {format(new Date(ticket.dueDate), 'HH:mm')}
                               </div>
                             </div>
                           ) : (

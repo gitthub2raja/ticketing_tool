@@ -7,7 +7,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { Plus, Edit, Trash2, Tag } from 'lucide-react'
 import { categoriesAPI, organizationsAPI } from '../../services/api'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 import toast from 'react-hot-toast'
 
 export const Categories = () => {
@@ -56,14 +56,12 @@ export const Categories = () => {
     if (category) {
       console.log('Setting editing category:', category)
       setEditingCategory(category)
-      // Convert is_active (boolean) to status (string) for display
-      const isActive = category.is_active !== undefined ? category.is_active : (category.isActive !== undefined ? category.isActive : true)
       setFormData({
         name: category.name,
         description: category.description || '',
         color: category.color || '#00ffff',
         organization: category.organization?._id || category.organization || '',
-        status: isActive ? 'active' : 'inactive',
+        status: category.status,
       })
     } else {
       setEditingCategory(null)
@@ -97,12 +95,6 @@ export const Categories = () => {
       const submitData = { ...formData }
       if (!submitData.organization) {
         delete submitData.organization // null = global category
-      }
-      
-      // Convert status (string) to is_active (boolean) for backend
-      if (submitData.status !== undefined) {
-        submitData.is_active = submitData.status === 'active'
-        delete submitData.status
       }
       
       if (editingCategory) {
@@ -208,8 +200,8 @@ export const Categories = () => {
                           )}
                         </div>
                       </div>
-                      <Badge variant={(category.is_active !== undefined ? category.is_active : (category.isActive !== undefined ? category.isActive : true)) ? 'success' : 'warning'}>
-                        {(category.is_active !== undefined ? category.is_active : (category.isActive !== undefined ? category.isActive : true)) ? 'Active' : 'Inactive'}
+                      <Badge variant={category.status === 'active' ? 'success' : 'warning'}>
+                        {category.status}
                       </Badge>
                     </div>
 
@@ -219,7 +211,7 @@ export const Categories = () => {
 
                     <div className="flex items-center justify-between pt-4 border-t-2 border-cyber-neon-cyan/20">
                       <p className="text-xs text-cyber-neon-cyan/50 font-mono">
-                        {safeFormat(category.createdAt, 'MMM dd, yyyy')}
+                        {format(new Date(category.createdAt), 'MMM dd, yyyy')}
                       </p>
                       <div 
                         className="flex items-center space-x-2"
@@ -288,97 +280,75 @@ export const Categories = () => {
           isOpen={isModalOpen}
           onClose={handleCloseModal}
           title={editingCategory ? 'Edit Category' : 'Add New Category'}
-          size="lg"
           footer={
-            <div className="flex space-x-3 w-full">
-              <Button variant="outline" onClick={handleCloseModal} className="flex-1">Cancel</Button>
-              <Button onClick={handleSubmit} className="flex-1">{editingCategory ? 'Update' : 'Create'} Category</Button>
-            </div>
+            <>
+              <Button variant="outline" onClick={handleCloseModal}>Cancel</Button>
+              <Button onClick={handleSubmit}>Save</Button>
+            </>
           }
         >
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="grid grid-cols-1 gap-5">
-              <Input
-                label="Category Name *"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                placeholder="e.g., IT Support, Hardware Issue"
-              />
-              
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Description
-                </label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Brief description of this category"
-                  rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none"
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              label="Category Name *"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              required
+              placeholder="e.g., IT Support"
+            />
+            <Input
+              label="Description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Category description"
+            />
+            <div>
+              <label className="block text-sm font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest mb-2">
+                Color
+              </label>
+              <div className="flex items-center space-x-3">
+                <input
+                  type="color"
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  className="w-16 h-10 rounded border-2 border-cyber-neon-cyan/50 bg-cyber-darker cursor-pointer"
+                />
+                <Input
+                  value={formData.color}
+                  onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                  placeholder="#00ffff"
+                  className="flex-1"
                 />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Color
-                  </label>
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="color"
-                      value={formData.color}
-                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      className="w-16 h-10 rounded border-2 border-gray-300 cursor-pointer"
-                    />
-                    <Input
-                      value={formData.color}
-                      onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                      placeholder="#00ffff"
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    Status
-                  </label>
-                  <div className="flex items-center space-x-3 h-10">
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.status === 'active'}
-                        onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                      <span className="ml-3 text-sm font-medium text-gray-700">
-                        {formData.status === 'active' ? 'Active' : 'Inactive'}
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Organization
-                </label>
-                <select
-                  value={formData.organization}
-                  onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                >
-                  <option value="">Global (All Organizations)</option>
-                  {organizations.map(org => (
-                    <option key={org._id || org.id} value={org._id || org.id}>
-                      {org.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-gray-500">Leave empty to make this category available to all organizations</p>
-              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest mb-2">
+                Organization (Leave empty for global)
+              </label>
+              <select
+                value={formData.organization}
+                onChange={(e) => setFormData({ ...formData, organization: e.target.value })}
+                className="w-full px-4 py-3 bg-cyber-darker/50 border-2 border-cyber-neon-cyan/30 rounded-lg text-cyber-neon-cyan focus:outline-none focus:border-cyber-neon-cyan focus:ring-2 focus:ring-cyber-neon-cyan/50 font-mono"
+              >
+                <option value="">Global (All Organizations)</option>
+                {organizations.map(org => (
+                  <option key={org._id || org.id} value={org._id || org.id}>
+                    {org.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-cyber font-bold text-cyber-neon-cyan uppercase tracking-widest mb-2">
+                Status
+              </label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-4 py-3 bg-cyber-darker/50 border-2 border-cyber-neon-cyan/30 rounded-lg text-cyber-neon-cyan focus:outline-none focus:border-cyber-neon-cyan focus:ring-2 focus:ring-cyber-neon-cyan/50 font-mono"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
             </div>
           </form>
         </Modal>

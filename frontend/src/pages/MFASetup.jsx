@@ -28,9 +28,8 @@ export const MFASetup = () => {
     try {
       setLoading(true)
       const data = await mfaAPI.getSetup()
-      // Support both camelCase and snake_case for backward compatibility
-      setQrCode(data.qrCode || data.qr_code)
-      setSecret(data.manualEntryKey || data.secret)
+      setQrCode(data.qrCode)
+      setSecret(data.manualEntryKey)
     } catch (error) {
       toast.error(error.message || 'Failed to load MFA setup')
       setStep(1)

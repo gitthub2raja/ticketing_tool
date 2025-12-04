@@ -13,7 +13,7 @@ import { chatbotAPI, usersAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 import { MessageSquare, Search, Eye, User as UserIcon } from 'lucide-react'
-import { safeFormat } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
 
 export const ChatHistory = () => {
   const { user } = useAuth()
@@ -235,7 +235,7 @@ export const ChatHistory = () => {
                             </p>
                           )}
                           <p className="text-xs text-gray-500 mt-1">
-                            {safeFormat(session.createdAt, 'MMM dd, yyyy HH:mm')}
+                            {format(new Date(session.createdAt), 'MMM dd, yyyy HH:mm')}
                           </p>
                         </div>
                         <Eye className="text-gray-400" size={18} />
@@ -281,7 +281,7 @@ export const ChatHistory = () => {
                         </div>
                       )}
                       <div>
-                        <strong>Started:</strong> {safeFormat(selectedSession.createdAt, 'MMM dd, yyyy HH:mm')}
+                        <strong>Started:</strong> {format(new Date(selectedSession.createdAt), 'MMM dd, yyyy HH:mm')}
                       </div>
                     </div>
                   </div>
@@ -316,7 +316,7 @@ export const ChatHistory = () => {
                                 {message.sender === 'user' ? '👤 User' : message.sender === 'technician' ? '👨‍💼 Technician' : '🤖 Bot'}
                               </span>
                               <span className="text-xs text-gray-500">
-                                {safeFormat(message.createdAt, 'MMM dd, HH:mm')}
+                                {format(new Date(message.createdAt || new Date()), 'MMM dd, HH:mm')}
                               </span>
                             </div>
                             <p className="text-sm text-gray-900 whitespace-pre-wrap">{message.content}</p>

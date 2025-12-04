@@ -9,7 +9,6 @@ import { Badge } from '../../components/ui/Badge'
 import { Plus, Edit, Trash2, Search, Download, Upload } from 'lucide-react'
 import { usersAPI, organizationsAPI, departmentsAPI } from '../../services/api'
 import { format } from 'date-fns'
-import { safeFormat } from '../../utils/dateHelpers'
 import toast from 'react-hot-toast'
 
 export const Users = () => {
@@ -20,7 +19,6 @@ export const Users = () => {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingUser, setEditingUser] = useState(null)
   const [searchTerm, setSearchTerm] = useState('')
-  const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -29,7 +27,6 @@ export const Users = () => {
     status: 'active',
     organization: '',
     department: '',
-    sendWelcomeEmail: true, // Default to true for new users
   })
 
   useEffect(() => {
@@ -66,7 +63,6 @@ export const Users = () => {
       setOrganizations(data)
     } catch (error) {
       console.error('Failed to load organizations', error)
-      toast.error('Failed to load organizations')
     }
   }
 
@@ -80,7 +76,6 @@ export const Users = () => {
       setDepartments(filtered)
     } catch (error) {
       console.error('Failed to load departments', error)
-      // Don't show toast for departments as it's called frequently
     }
   }
 
@@ -92,17 +87,14 @@ export const Users = () => {
   const handleOpenModal = (user = null) => {
     if (user) {
       setEditingUser(user)
-      // Convert is_active (boolean) to status (string) for display
-      const isActive = user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)
       setFormData({
         name: user.name,
         email: user.email,
         password: '', // Don't show existing password
         role: user.role,
-        status: isActive ? 'active' : 'inactive',
+        status: user.status,
         organization: user.organization?._id || user.organization || '',
         department: user.department?._id || user.department || '',
-        sendWelcomeEmail: false, // Don't send welcome email when editing
       })
       // Load departments for this user's organization
       if (user.organization?._id || user.organization) {
@@ -110,16 +102,7 @@ export const Users = () => {
       }
     } else {
       setEditingUser(null)
-      setFormData({ 
-        name: '', 
-        email: '', 
-        password: '', 
-        role: '', 
-        status: 'active', 
-        organization: '', 
-        department: '',
-        sendWelcomeEmail: true, // Send welcome email for new users by default
-      })
+      setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
     }
     setIsModalOpen(true)
   }
@@ -127,29 +110,12 @@ export const Users = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingUser(null)
-    setFormData({ 
-      name: '', 
-      email: '', 
-      password: '', 
-      role: '', 
-      status: 'active', 
-      organization: '', 
-      department: '',
-      sendWelcomeEmail: true,
-    })
+    setFormData({ name: '', email: '', password: '', role: '', status: 'active', organization: '', department: '' })
     setDepartments([])
   }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    // Prevent duplicate submissions
-    if (isSubmitting) {
-      return
-    }
-    
-    setIsSubmitting(true)
-    
     try {
       // Prepare data - only include password if provided
       const submitData = { ...formData }
@@ -157,55 +123,27 @@ export const Users = () => {
         // Remove password if editing and not provided
         delete submitData.password
       }
-      
-      // Convert status (string) to is_active (boolean) for backend
-      if (submitData.status !== undefined) {
-        submitData.is_active = submitData.status === 'active'
-        delete submitData.status
-      }
 
       if (editingUser) {
         await usersAPI.update(editingUser._id || editingUser.id, submitData)
         toast.success('User updated successfully!')
-        handleCloseModal()
-        await loadUsers()
       } else {
         // Password and organization are required for new users
         if (!submitData.password) {
           toast.error('Password is required for new users')
-          setIsSubmitting(false)
           return
         }
         if (!submitData.organization) {
           toast.error('Organization is required for new users')
-          setIsSubmitting(false)
           return
         }
-        
-        // Include sendWelcomeEmail flag for new users
-        const createData = { 
-          ...submitData, 
-          sendWelcomeEmail: formData.sendWelcomeEmail !== false 
-        }
-        
-        await usersAPI.create(createData)
-        
-        if (formData.sendWelcomeEmail !== false) {
-          toast.success('User created successfully! Welcome email sent.')
-        } else {
-          toast.success('User created successfully!')
-        }
-        
-        handleCloseModal()
-        await loadUsers()
+        await usersAPI.create(submitData)
+        toast.success('User created successfully!')
       }
+      handleCloseModal()
+      loadUsers()
     } catch (error) {
-      console.error('User creation/update error:', error)
-      // Show error message only once
-      const errorMessage = error.message || error.detail || 'Failed to save user'
-      toast.error(errorMessage)
-    } finally {
-      setIsSubmitting(false)
+      toast.error(error.message || 'Failed to save user')
     }
   }
 
@@ -223,18 +161,15 @@ export const Users = () => {
 
   const handleExportUsers = () => {
     const headers = ['Name', 'Email', 'Password', 'Role', 'Status', 'Organization', 'Department']
-    const rows = users.map(user => {
-      const isActive = user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)
-      return [
-        user.name,
-        user.email,
-        '', // Password not exported for security
-        user.role,
-        isActive ? 'Active' : 'Inactive',
-        user.organization?.name || 'N/A',
-        user.department?.name || 'N/A',
-      ]
-    })
+    const rows = users.map(user => [
+      user.name,
+      user.email,
+      '', // Password not exported for security
+      user.role,
+      user.status,
+      user.organization?.name || 'N/A',
+      user.department?.name || 'N/A',
+    ])
 
     const csvContent = [
       headers.join(','),
@@ -440,12 +375,12 @@ export const Users = () => {
                       </Badge>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={(user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)) ? 'success' : 'warning'}>
-                        {(user.is_active !== undefined ? user.is_active : (user.isActive !== undefined ? user.isActive : true)) ? 'Active' : 'Inactive'}
+                      <Badge variant={user.status === 'active' ? 'success' : 'warning'}>
+                        {user.status}
                       </Badge>
                     </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {safeFormat(user.createdAt, 'MMM dd, yyyy')}
+                        {format(new Date(user.createdAt), 'MMM dd, yyyy')}
                       </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
@@ -477,29 +412,8 @@ export const Users = () => {
           title={editingUser ? 'Edit User' : 'Add New User'}
           footer={
             <>
-              <Button 
-                variant="outline" 
-                transparent 
-                onClick={handleCloseModal}
-                disabled={isSubmitting}
-                type="button"
-              >
-                Cancel
-              </Button>
-              <Button 
-                transparent 
-                onClick={handleSubmit} 
-                type="submit"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? (
-                  'Processing...'
-                ) : editingUser ? (
-                  'Save Changes'
-                ) : (
-                  'Create User'
-                )}
-              </Button>
+              <Button variant="outline" transparent onClick={handleCloseModal}>Cancel</Button>
+              <Button transparent onClick={handleSubmit}>Save</Button>
             </>
           }
         >
@@ -561,39 +475,16 @@ export const Users = () => {
               ]}
               required
             />
-            {!editingUser && (
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="sendWelcomeEmail"
-                  checked={formData.sendWelcomeEmail !== false}
-                  onChange={(e) => setFormData({ ...formData, sendWelcomeEmail: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                />
-                <label htmlFor="sendWelcomeEmail" className="ml-2 text-sm text-gray-700">
-                  Send welcome email notification to user
-                </label>
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Status
-              </label>
-              <div className="flex items-center space-x-3 h-10">
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.status === 'active'}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.checked ? 'active' : 'inactive' })}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                  <span className="ml-3 text-sm font-medium text-gray-700">
-                    {formData.status === 'active' ? 'Active' : 'Inactive'}
-                  </span>
-                </label>
-              </div>
-            </div>
+            <Select
+              label="Status"
+              value={formData.status}
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'inactive', label: 'Inactive' },
+              ]}
+              required
+            />
           </form>
         </Modal>
       </div>

@@ -7,18 +7,23 @@ import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
 import { Plus, Search, Filter } from 'lucide-react'
-import { ticketsAPI } from '../../services/api'
-import { safeFormat, safeDate, isOverdue } from '../../utils/dateHelpers'
+import { format } from 'date-fns'
+import { ticketsAPI, departmentsAPI } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 import toast from 'react-hot-toast'
 
 export const TicketList = () => {
+  const { user } = useAuth()
   const [searchParams] = useSearchParams()
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [priorityFilter, setPriorityFilter] = useState('all')
+  const [departmentFilter, setDepartmentFilter] = useState('all')
+  const [departments, setDepartments] = useState([])
   const navigate = useNavigate()
+  const isAdmin = user?.role === 'admin' || user?.role === 'agent'
 
   // Update status filter when URL query parameter changes
   useEffect(() => {
@@ -28,10 +33,17 @@ export const TicketList = () => {
     }
   }, [searchParams])
 
+  // Load departments for admins/agents
+  useEffect(() => {
+    if (isAdmin) {
+      loadDepartments()
+    }
+  }, [isAdmin])
+
   // Load tickets on mount and when filters change
   useEffect(() => {
     loadTickets()
-  }, [statusFilter, priorityFilter])
+  }, [statusFilter, priorityFilter, departmentFilter])
 
   // Debounce search to avoid too many API calls
   useEffect(() => {
@@ -42,6 +54,15 @@ export const TicketList = () => {
     return () => clearTimeout(timer)
   }, [searchTerm])
 
+  const loadDepartments = async () => {
+    try {
+      const data = await departmentsAPI.getAll()
+      setDepartments(data || [])
+    } catch (error) {
+      console.error('Failed to load departments', error)
+    }
+  }
+
   const loadTickets = async () => {
     try {
       setLoading(true)
@@ -51,6 +72,9 @@ export const TicketList = () => {
       }
       if (priorityFilter && priorityFilter !== 'all') {
         filters.priority = priorityFilter
+      }
+      if (departmentFilter && departmentFilter !== 'all') {
+        filters.department = departmentFilter
       }
       if (searchTerm && searchTerm.trim()) {
         filters.search = searchTerm.trim()
@@ -149,7 +173,7 @@ export const TicketList = () => {
 
             {/* Filters */}
             <Card className="animate-slide-down" style={{ animationDelay: '0.1s' }}>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4 items-end`}>
                 <div className="relative md:col-span-2 lg:col-span-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10" size={20} />
                   <Input
@@ -190,6 +214,22 @@ export const TicketList = () => {
                     ]}
                   />
                 </div>
+                {isAdmin && departments.length > 0 && (
+                  <div className="w-full">
+                    <Select
+                      label="Department"
+                      value={departmentFilter}
+                      onChange={(e) => setDepartmentFilter(e.target.value)}
+                      options={[
+                        { value: 'all', label: 'All Departments' },
+                        ...departments.map(dept => ({
+                          value: dept._id || dept.id,
+                          label: dept.name,
+                        })),
+                      ]}
+                    />
+                  </div>
+                )}
                 <div className="w-full">
                   <Button variant="outline" transparent className="w-full">
                     <Filter size={20} className="mr-2" />
@@ -230,7 +270,7 @@ export const TicketList = () => {
                       </tr>
                     ) : (
                       filteredTickets.map((ticket, index) => {
-                        const ticketIsOverdue = isOverdue(ticket.dueDate, ticket.status)
+                        const isOverdue = ticket.dueDate && new Date(ticket.dueDate) < new Date() && (ticket.status === 'open' || ticket.status === 'in-progress')
                         return (
                           <tr 
                             key={ticket._id} 
@@ -245,11 +285,7 @@ export const TicketList = () => {
                                   target.closest('.badge')) {
                                 return
                               }
-                              if (ticket.ticketId) {
-                                navigate(`/tickets/${ticket.ticketId}`)
-                              } else {
-                                toast.error('Ticket ID not available')
-                              }
+                              navigate(`/tickets/${ticket.ticketId}`)
                             }}
                           >
                             <td className="px-6 py-4 whitespace-nowrap align-middle">
@@ -285,18 +321,18 @@ export const TicketList = () => {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 align-middle">
-                              <div className="font-medium">{safeFormat(ticket.createdAt, 'MMM dd, yyyy')}</div>
-                              <div className="text-xs text-gray-500">{safeFormat(ticket.createdAt, 'HH:mm')}</div>
+                              <div className="font-medium">{format(new Date(ticket.createdAt), 'MMM dd, yyyy')}</div>
+                              <div className="text-xs text-gray-500">{format(new Date(ticket.createdAt), 'HH:mm')}</div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 align-middle">
                               {ticket.dueDate ? (
                                 <div>
-                                  <div className={ticketIsOverdue ? 'text-red-600 font-medium' : 'text-gray-700'}>
-                                    {safeFormat(ticket.dueDate, 'MMM dd, yyyy')}
-                                    {ticketIsOverdue && <span className="ml-1 text-red-600">⚠</span>}
+                                  <div className={isOverdue ? 'text-red-600 font-medium' : 'text-gray-700'}>
+                                    {format(new Date(ticket.dueDate), 'MMM dd, yyyy')}
+                                    {isOverdue && <span className="ml-1 text-red-600">⚠</span>}
                                   </div>
-                                  <div className={`text-xs ${ticketIsOverdue ? 'text-red-500' : 'text-gray-500'}`}>
-                                    {safeFormat(ticket.dueDate, 'HH:mm')}
+                                  <div className={`text-xs ${isOverdue ? 'text-red-500' : 'text-gray-500'}`}>
+                                    {format(new Date(ticket.dueDate), 'HH:mm')}
                                   </div>
                                 </div>
                               ) : (
@@ -311,7 +347,7 @@ export const TicketList = () => {
                                   </div>
                                   {ticket.approvedAt && (
                                     <div className="text-xs text-gray-500">
-                                      {safeFormat(ticket.approvedAt, 'MMM dd, yyyy HH:mm')}
+                                      {format(new Date(ticket.approvedAt), 'MMM dd, yyyy HH:mm')}
                                     </div>
                                   )}
                                 </div>
@@ -336,11 +372,7 @@ export const TicketList = () => {
                                 onClick={(e) => {
                                   e.preventDefault()
                                   e.stopPropagation()
-                                  if (ticket.ticketId) {
-                                    navigate(`/tickets/${ticket.ticketId}`)
-                                  } else {
-                                    toast.error('Ticket ID not available')
-                                  }
+                                  navigate(`/tickets/${ticket.ticketId}`)
                                 }}
                                 className="text-primary-600 hover:text-primary-700 transition-colors font-semibold px-2 py-1 rounded hover:bg-primary-50 relative z-10"
                               >
