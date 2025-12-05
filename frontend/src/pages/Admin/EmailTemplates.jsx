@@ -247,7 +247,7 @@ export const EmailTemplates = () => {
       ticketPriority: 'medium',
       ticketStatus: 'open',
       customerName: 'John Doe',
-      assigneeName: 'Support Agent',
+      assigneeName: 'Support Technician',
     }
     
     Object.keys(sampleData).forEach(key => {

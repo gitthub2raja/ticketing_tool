@@ -15,8 +15,10 @@ import toast from 'react-hot-toast'
 export const Dashboard = () => {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const isAdmin = user?.role === 'admin' || user?.role === 'agent'
+  const isAdmin = user?.role === 'admin'
+  const isTechnician = user?.role === 'technician'
   const isDepartmentHead = user?.role === 'department-head'
+  const isAgentOrTechnician = isTechnician
   
   // Map status labels to status values for navigation
   const getStatusFromLabel = (label) => {
@@ -73,7 +75,7 @@ export const Dashboard = () => {
       loadDepartments()
     }
     loadDashboardData()
-  }, [selectedOrganization, selectedDepartment, user, isAdmin, isDepartmentHead])
+  }, [selectedOrganization, selectedDepartment, user, isAdmin, isDepartmentHead, isAgentOrTechnician])
 
   const loadOrganizations = async () => {
     try {
@@ -135,7 +137,51 @@ export const Dashboard = () => {
           percentage: totalPriorityTickets > 0 ? Math.round((item.value / totalPriorityTickets) * 100) : 0
         }))
         setPriorityData(priorityWithPercentages)
-      } else if (!isAdmin) {
+      } else if (isAgentOrTechnician) {
+        // For technicians: show tickets assigned to them OR tickets they created
+        const myOpenTicketsList = data.myOpenTickets || []
+        
+        // Get all tickets (assigned to them or created by them) for stats
+        const allMyTickets = await ticketsAPI.getAll()
+        
+        // Calculate stats for technician tickets
+        const myStats = {
+          totalTickets: allMyTickets.length || 0,
+          openTickets: allMyTickets.filter(t => t.status === 'open').length || 0,
+          pendingTickets: allMyTickets.filter(t => t.status === 'open' || t.status === 'in-progress').length || 0,
+          closedTickets: allMyTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length || 0,
+          overdueTickets: allMyTickets.filter(t => {
+            if (!t.dueDate) return false
+            const due = new Date(t.dueDate)
+            const now = new Date()
+            return (t.status === 'open' || t.status === 'in-progress') && due < now
+          }).length || 0,
+        }
+        
+        setStats(myStats)
+        setMyOpenTickets(myOpenTicketsList)
+        setRecentTickets(data.recentTickets || [])
+        
+        // Status distribution for technician tickets
+        const statusCounts = {}
+        allMyTickets.forEach(ticket => {
+          statusCounts[ticket.status] = (statusCounts[ticket.status] || 0) + 1
+        })
+        setStatusData(Object.entries(statusCounts).map(([name, value]) => ({ name, value })))
+        
+        // Priority distribution for technician tickets
+        const priorityCounts = {}
+        allMyTickets.forEach(ticket => {
+          priorityCounts[ticket.priority] = (priorityCounts[ticket.priority] || 0) + 1
+        })
+        const totalPriorityTickets = Object.values(priorityCounts).reduce((sum, val) => sum + val, 0)
+        const priorityWithPercentages = Object.entries(priorityCounts).map(([name, value]) => ({
+          name,
+          value,
+          percentage: totalPriorityTickets > 0 ? Math.round((value / totalPriorityTickets) * 100) : 0
+        }))
+        setPriorityData(priorityWithPercentages)
+      } else if (!isAdmin && !isAgentOrTechnician) {
         // For regular users, only show their own tickets
         // Use data from dashboard stats API which already filters by creator for regular users
         const myOpenTicketsList = data.myOpenTickets || []
@@ -175,7 +221,7 @@ export const Dashboard = () => {
         }))
         setPriorityData(priorityWithPercentages)
       } else {
-        // Admin/Agent view - show all data
+        // Admin/Technician view - show all data
       setStats({
         totalTickets: data.totalTickets || 0,
         openTickets: data.openTickets || 0,
@@ -228,7 +274,7 @@ export const Dashboard = () => {
     }
   }
 
-  const statsData = (isAdmin || isDepartmentHead) ? [
+  const statsData = (isAdmin || isDepartmentHead || isAgentOrTechnician) ? [
     { 
       label: 'Total Tickets', 
       value: stats.totalTickets.toLocaleString(), 
@@ -718,10 +764,10 @@ export const Dashboard = () => {
               </Card>
             )}
 
-            {/* My Open Tickets and Recent Activity Row - Only for Admin/Agent */}
-            {(isAdmin || isDepartmentHead) && (
+            {/* My Open Tickets and Recent Activity Row - For Admin/Technician */}
+            {(isAdmin || isDepartmentHead || isAgentOrTechnician) && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <Card title="My Open Tickets">
+                <Card title={isAgentOrTechnician ? "My Assigned Tickets" : "My Open Tickets"}>
                   <div className="space-y-3">
                     {loading ? (
                       <div className="text-center text-gray-500 py-8">Loading...</div>
@@ -801,7 +847,7 @@ export const Dashboard = () => {
               </div>
             )}
 
-            {/* Recent Tickets Table - Only for Admin/Agent */}
+            {/* Recent Tickets Table - Only for Admin/Technician */}
             {isAdmin && (
               <Card title="Recent Tickets">
               <div className="overflow-x-auto">

@@ -109,6 +109,7 @@ export const EmailSettings = () => {
           },
         })
       }
+
     } catch (error) {
       console.error('Failed to load email settings:', error)
     }

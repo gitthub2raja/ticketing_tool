@@ -11,7 +11,7 @@ import toast from 'react-hot-toast'
 
 const mockRoles = [
   { id: 1, name: 'Admin', description: 'Full system access', permissions: ['all'], userCount: 2 },
-  { id: 2, name: 'Agent', description: 'Can manage tickets and respond to users', permissions: ['tickets:read', 'tickets:write', 'comments:write'], userCount: 5 },
+  { id: 2, name: 'Technician', description: 'Can manage tickets and respond to users', permissions: ['tickets:read', 'tickets:write', 'comments:write'], userCount: 5 },
   { id: 3, name: 'User', description: 'Can create and view own tickets', permissions: ['tickets:read', 'tickets:create'], userCount: 50 },
 ]
 

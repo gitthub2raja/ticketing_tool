@@ -8,6 +8,15 @@ import { protect, admin } from '../middleware/auth.js'
 
 const router = express.Router()
 
+const normalizeDomainList = (value) => {
+  if (!value) return []
+  const items = Array.isArray(value) ? value : String(value).split(/[,\\n]/)
+  const trimmed = items
+    .map(d => d && String(d).trim().replace(/^@/, '').toLowerCase())
+    .filter(Boolean)
+  return Array.from(new Set(trimmed))
+}
+
 // SSO Configuration Routes
 router.get('/sso', protect, admin, async (req, res) => {
   try {
@@ -50,7 +59,7 @@ router.get('/email', protect, admin, async (req, res) => {
 router.put('/email', protect, admin, async (req, res) => {
   try {
     const settings = await EmailSettings.getSettings()
-    const { smtp, imap } = req.body
+    const { smtp, imap, domainRules } = req.body
 
     if (smtp) {
       // Trim credentials to remove accidental spaces (important for App Passwords)
@@ -138,6 +147,18 @@ router.put('/email', protect, admin, async (req, res) => {
         auth: authConfig,
         folder: imap.folder || 'INBOX',
         enabled: true,
+      }
+    }
+
+    if (domainRules) {
+      const whitelist = normalizeDomainList(domainRules.whitelist || domainRules.allowlist)
+      const blacklist = normalizeDomainList(domainRules.blacklist || domainRules.blocklist)
+      const enabled = domainRules.enabled !== undefined ? Boolean(domainRules.enabled) : (settings.domainRules?.enabled ?? false)
+
+      settings.domainRules = {
+        enabled,
+        whitelist,
+        blacklist,
       }
     }
 

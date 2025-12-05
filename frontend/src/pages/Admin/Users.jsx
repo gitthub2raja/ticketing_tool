@@ -370,7 +370,7 @@ export const Users = () => {
                       {user.department?.name || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'agent' ? 'info' : user.role === 'department-head' ? 'warning' : 'info'}>
+                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'technician' ? 'info' : user.role === 'department-head' ? 'warning' : 'info'}>
                         {user.role}
                       </Badge>
                     </td>
@@ -468,10 +468,9 @@ export const Users = () => {
               onChange={(e) => setFormData({ ...formData, role: e.target.value })}
               options={[
                 { value: 'user', label: 'User' },
-                { value: 'agent', label: 'Agent' },
+                { value: 'technician', label: 'Technician' },
                 { value: 'admin', label: 'Admin' },
                 { value: 'department-head', label: 'Department Head' },
-                { value: 'technician', label: 'Technician' },
               ]}
               required
             />

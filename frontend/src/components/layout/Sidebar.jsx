@@ -46,7 +46,7 @@ const getMenuItems = (userRole) => {
   ]
   
   // Only show Reports for admins and agents
-  if (userRole === 'admin' || userRole === 'agent') {
+  if (userRole === 'admin' || userRole === 'technician') {
     items.push({ path: '/reports', icon: FileText, label: 'Reports' })
   }
   
@@ -67,6 +67,7 @@ const adminMenuItems = [
   { path: '/admin/api-keys', icon: Key, label: 'API Keys' },
   { path: '/admin/integrations', icon: Plug, label: 'External Integrations' },
   { path: '/admin/email', icon: Mail, label: 'Email Settings' },
+  { path: '/admin/domain-rules', icon: Shield, label: 'Domain Rules' },
   { path: '/admin/email-templates', icon: FileCode, label: 'Email Templates' },
   { path: '/admin/email-automation', icon: Send, label: 'Email Automation' },
   { path: '/admin/faq', icon: HelpCircle, label: 'FAQ Management' },
@@ -117,6 +118,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
   })
 
   const handleSetTicketId = () => {
+    if (!isAdmin) return
     const ticketId = parseInt(manualTicketId)
     if (isNaN(ticketId) || ticketId < 1) {
       toast.error('Please enter a valid ticket ID (must be a positive number)')
@@ -233,27 +235,29 @@ export const Sidebar = ({ isOpen, onClose }) => {
               background: 'linear-gradient(to top, rgba(255, 255, 255, 0.6) 0%, transparent 100%)',
             }}
           >
-            <button
-              onClick={() => {
-                setShowTicketIdModal(true)
-                if (window.innerWidth < 1024) onClose()
-              }}
-              className="w-full flex items-center px-4 py-3 text-gray-700 rounded-xl transition-all duration-300 mb-2 backdrop-blur-md hover:bg-white/50 hover:text-gray-900 border border-transparent hover:border-white/40 shadow-sm hover:shadow-md group"
-            >
-              <div className="relative">
-                <Hash size={20} className="mr-3 text-gray-500 group-hover:text-primary-600 transition-colors" />
+            {isAdmin && (
+              <button
+                onClick={() => {
+                  setShowTicketIdModal(true)
+                  if (window.innerWidth < 1024) onClose()
+                }}
+                className="w-full flex items-center px-4 py-3 text-gray-700 rounded-xl transition-all duration-300 mb-2 backdrop-blur-md hover:bg-white/50 hover:text-gray-900 border border-transparent hover:border-white/40 shadow-sm hover:shadow-md group"
+              >
+                <div className="relative">
+                  <Hash size={20} className="mr-3 text-gray-500 group-hover:text-primary-600 transition-colors" />
+                  {localStorage.getItem('manualTicketId') && (
+                    <CheckCircle size={12} className="absolute -top-1 -right-1 text-green-500 bg-white rounded-full" />
+                  )}
+                </div>
+                <span className="text-sm font-medium">Manual Ticket ID</span>
                 {localStorage.getItem('manualTicketId') && (
-                  <CheckCircle size={12} className="absolute -top-1 -right-1 text-green-500 bg-white rounded-full" />
+                  <span className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-1 rounded-full">
+                    <HashIcon size={12} />
+                    #{localStorage.getItem('manualTicketId')}
+                  </span>
                 )}
-              </div>
-              <span className="text-sm font-medium">Manual Ticket ID</span>
-              {localStorage.getItem('manualTicketId') && (
-                <span className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary-600 bg-primary-50 px-2 py-1 rounded-full">
-                  <HashIcon size={12} />
-                  #{localStorage.getItem('manualTicketId')}
-                </span>
-              )}
-            </button>
+              </button>
+            )}
             <NavLink
               to="/profile"
               onClick={() => window.innerWidth < 1024 && onClose()}
@@ -274,81 +278,83 @@ export const Sidebar = ({ isOpen, onClose }) => {
       </aside>
 
       {/* Manual Ticket ID Modal */}
-      <Modal
-        isOpen={showTicketIdModal}
-        onClose={() => setShowTicketIdModal(false)}
-        title={
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-primary-100 rounded-lg">
-              <HashIcon size={20} className="text-primary-600" />
-            </div>
-            <span>Set Manual Ticket ID</span>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-            <Info size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
-            <p className="text-sm text-gray-700">
-              Set a starting ticket ID. Once set, new tickets will continue sequentially from this ID.
-              Leave empty to use auto-increment from the highest existing ticket ID.
-            </p>
-          </div>
-          
-          <Input
-            label={
-              <div className="flex items-center gap-2">
-                <HashIcon size={16} className="text-gray-500" />
-                <span>Starting Ticket ID</span>
+      {isAdmin && (
+        <Modal
+          isOpen={showTicketIdModal}
+          onClose={() => setShowTicketIdModal(false)}
+          title={
+            <div className="flex items-center gap-2">
+              <div className="p-2 bg-primary-100 rounded-lg">
+                <HashIcon size={20} className="text-primary-600" />
               </div>
-            }
-            type="number"
-            placeholder="e.g., 1000"
-            value={manualTicketId}
-            onChange={(e) => setManualTicketId(e.target.value)}
-            min="1"
-            icon={<HashIcon size={18} className="text-gray-400" />}
-          />
-
-          {localStorage.getItem('manualTicketId') && (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
-              <CheckCircle size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-green-900 mb-1">
-                  Manual Ticket ID is Active
-                </p>
-                <p className="text-sm text-green-800 flex items-center gap-1">
-                  <HashIcon size={14} />
-                  Current setting: Ticket ID #{localStorage.getItem('manualTicketId')}
-                </p>
-                <p className="text-xs text-green-700 mt-1">
-                  New tickets will start from #{parseInt(localStorage.getItem('manualTicketId')) + 1}
-                </p>
-              </div>
+              <span>Set Manual Ticket ID</span>
             </div>
-          )}
+          }
+        >
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <Info size={18} className="text-blue-600 mt-0.5 flex-shrink-0" />
+              <p className="text-sm text-gray-700">
+                Set a starting ticket ID. Once set, new tickets will continue sequentially from this ID.
+                Leave empty to use auto-increment from the highest existing ticket ID.
+              </p>
+            </div>
+            
+            <Input
+              label={
+                <div className="flex items-center gap-2">
+                  <HashIcon size={16} className="text-gray-500" />
+                  <span>Starting Ticket ID</span>
+                </div>
+              }
+              type="number"
+              placeholder="e.g., 1000"
+              value={manualTicketId}
+              onChange={(e) => setManualTicketId(e.target.value)}
+              min="1"
+              icon={<HashIcon size={18} className="text-gray-400" />}
+            />
 
-          <div className="flex gap-2 justify-end pt-2">
             {localStorage.getItem('manualTicketId') && (
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg flex items-start gap-3">
+                <CheckCircle size={20} className="text-green-600 mt-0.5 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-green-900 mb-1">
+                    Manual Ticket ID is Active
+                  </p>
+                  <p className="text-sm text-green-800 flex items-center gap-1">
+                    <HashIcon size={14} />
+                    Current setting: Ticket ID #{localStorage.getItem('manualTicketId')}
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    New tickets will start from #{parseInt(localStorage.getItem('manualTicketId')) + 1}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end pt-2">
+              {localStorage.getItem('manualTicketId') && (
+                <Button
+                  variant="outline"
+                  onClick={handleClearTicketId}
+                  className="flex items-center gap-2"
+                >
+                  <XCircle size={16} />
+                  Clear Setting
+                </Button>
+              )}
               <Button
-                variant="outline"
-                onClick={handleClearTicketId}
+                onClick={handleSetTicketId}
                 className="flex items-center gap-2"
               >
-                <XCircle size={16} />
-                Clear Setting
+                <Edit3 size={16} />
+                Set Ticket ID
               </Button>
-            )}
-            <Button
-              onClick={handleSetTicketId}
-              className="flex items-center gap-2"
-            >
-              <Edit3 size={16} />
-              Set Ticket ID
-            </Button>
+            </div>
           </div>
-        </div>
-      </Modal>
+        </Modal>
+      )}
     </>
   )
 }

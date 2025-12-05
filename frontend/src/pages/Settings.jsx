@@ -228,7 +228,7 @@ export const Settings = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
-              <Badge variant={user?.role === 'admin' ? 'danger' : user?.role === 'agent' ? 'info' : 'info'}>
+              <Badge variant={user?.role === 'admin' ? 'danger' : user?.role === 'technician' ? 'info' : 'info'}>
                 {user?.role || 'user'}
               </Badge>
             </div>

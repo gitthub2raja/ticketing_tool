@@ -3,7 +3,7 @@ import { simpleParser } from 'mailparser'
 import EmailSettings from '../models/EmailSettings.js'
 import Ticket from '../models/Ticket.js'
 import User from '../models/User.js'
-import { sendTicketAcknowledgment } from './emailService.js'
+import { sendTicketAcknowledgment, sendEmail } from './emailService.js'
 
 // Refresh OAuth2 access token for IMAP
 const refreshOAuth2Token = async (clientId, clientSecret, refreshToken) => {
@@ -150,9 +150,47 @@ const getOrCreateUser = async (email, name) => {
   return user
 }
 
-// Process a single email and create ticket
-const processEmail = async (emailData) => {
+const normalizeDomain = (email) => {
+  if (!email || typeof email !== 'string') return ''
+  const atIndex = email.indexOf('@')
+  if (atIndex === -1) return ''
+  return email.slice(atIndex + 1).trim().toLowerCase()
+}
+
+const evaluateDomainRules = (email, domainRules) => {
+  const domain = normalizeDomain(email)
+  if (!domain) return { allowed: false, reason: 'Invalid sender domain' }
+
+  const whitelist = (domainRules?.whitelist || []).map(d => d.toLowerCase())
+  const blacklist = (domainRules?.blacklist || []).map(d => d.toLowerCase())
+
+  if (blacklist.includes(domain)) {
+    return { allowed: false, reason: `Domain ${domain} is blocked` }
+  }
+
+  if (whitelist.length > 0 && !whitelist.includes(domain)) {
+    return { allowed: false, reason: `Domain ${domain} is not whitelisted` }
+  }
+
+  return { allowed: true }
+}
+
+const sendDomainRejectionEmail = async (to, reason) => {
   try {
+    await sendEmail(
+      to,
+      'Ticket Submission Rejected',
+      `<p>Your email could not be processed because: ${reason}.</p><p>If you believe this is an error, please contact the administrator.</p>`
+    )
+  } catch (error) {
+    console.error('Failed to send domain rejection email:', error.message || error)
+  }
+}
+
+// Process a single email and create ticket
+const processEmail = async (emailData, settingsFromCheck) => {
+  try {
+    const emailSettings = settingsFromCheck || await EmailSettings.getSettings()
     const ticketData = parseEmailToTicket(emailData)
     
     // Check if ticket already exists (by email message ID)
@@ -167,6 +205,16 @@ const processEmail = async (emailData) => {
       }
     }
     
+    // Enforce domain rules if enabled
+    if (emailSettings?.domainRules?.enabled) {
+      const result = evaluateDomainRules(ticketData.fromEmail, emailSettings.domainRules)
+      if (!result.allowed) {
+        console.warn(`❌ Ticket creation blocked for ${ticketData.fromEmail}: ${result.reason}`)
+        await sendDomainRejectionEmail(ticketData.fromEmail, result.reason)
+        return null
+      }
+    }
+
     // Get or create user
     const creator = await getOrCreateUser(ticketData.fromEmail, ticketData.fromName)
     
@@ -306,7 +354,7 @@ export const checkEmails = async () => {
               const tickets = []
               for (const emailData of emails) {
                 try {
-                  const ticket = await processEmail(emailData)
+                  const ticket = await processEmail(emailData, settings)
                   if (ticket) {
                     tickets.push(ticket)
                   }

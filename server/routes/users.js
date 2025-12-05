@@ -27,24 +27,47 @@ router.get('/mentions', protect, async (req, res) => {
 
 // @route   GET /api/users
 // @desc    Get all users (filtered by organization for non-admins)
-// @access  Private/Admin
-router.get('/', protect, admin, async (req, res) => {
+// @access  Private (Admin/Technician can access)
+router.get('/', protect, async (req, res) => {
   try {
     const { organization } = req.query
     const query = {}
     
-    // Filter by organization if provided (admins can filter)
-    if (organization) {
-      query.organization = organization
+    // Admins can filter by organization or see all users
+    if (req.user.role === 'admin') {
+      if (organization) {
+        query.organization = organization
+      }
+      // If no organization filter, admins see all users
+    } else if (req.user.role === 'technician') {
+      // Technicians can only see users from their organization
+      // Handle both populated organization object and organization ID
+      const userOrgId = req.user.organization?._id?.toString() || req.user.organization?.toString() || req.user.organization
+      
+      if (userOrgId) {
+        query.organization = userOrgId
+      } else {
+        // If technician has no organization, return empty array
+        console.log('Technician has no organization assigned:', req.user.email)
+        return res.json([])
+      }
+    } else {
+      // Regular users cannot access this endpoint
+      return res.status(403).json({ message: 'Access denied' })
     }
+    
+    console.log('GET /api/users - User role:', req.user.role, 'Query:', JSON.stringify(query))
     
     const users = await User.find(query)
       .select('-password')
       .populate('organization', 'name')
       .populate('department', 'name')
       .sort({ createdAt: -1 })
+    
+    console.log('GET /api/users - Found users:', users.length)
     res.json(users)
   } catch (error) {
+    console.error('GET /api/users - Error:', error)
     res.status(500).json({ message: error.message })
   }
 })

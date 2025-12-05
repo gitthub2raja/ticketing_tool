@@ -28,6 +28,8 @@ export const TicketDetail = () => {
   const [mentionSuggestions, setMentionSuggestions] = useState([])
   const [mentionIndex, setMentionIndex] = useState(-1)
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const [assignees, setAssignees] = useState([])
+  const [assigneeLoading, setAssigneeLoading] = useState(false)
   const textareaRef = useRef(null)
   const mentionListRef = useRef(null)
 
@@ -47,7 +49,10 @@ export const TicketDetail = () => {
   useEffect(() => {
     loadTicket()
     loadMentionUsers()
-  }, [id])
+    if (user?.role === 'admin' || user?.role === 'technician') {
+      loadAssignees()
+    }
+  }, [id, user])
 
   const loadMentionUsers = async () => {
     try {
@@ -55,6 +60,58 @@ export const TicketDetail = () => {
       setMentionUsers(users)
     } catch (error) {
       console.error('Failed to load users for mentions:', error)
+    }
+  }
+
+  const loadAssignees = async () => {
+    try {
+      setAssigneeLoading(true)
+      const users = await usersAPI.getAll()
+      console.log('All users loaded for assignees:', users?.length || 0, users)
+      
+      if (!users || users.length === 0) {
+        console.warn('No users returned from API. User may not have access or no users exist.')
+        setAssignees([])
+        return
+      }
+      
+      const assignable = (users || []).filter(u => {
+        const hasValidRole = u.role === 'admin' || u.role === 'technician'
+        const isActive = u.status === 'active' || u.is_active === true || u.isActive === true
+        const result = hasValidRole && isActive
+        if (!result && hasValidRole) {
+          console.log('User filtered out (inactive):', u.name, u.email, 'status:', u.status, 'is_active:', u.is_active, 'isActive:', u.isActive)
+        }
+        return result
+      })
+      
+      console.log('Assignable users found:', assignable.length, assignable.map(u => ({ name: u.name, role: u.role, status: u.status })))
+      setAssignees(assignable)
+      
+      if (assignable.length === 0) {
+        console.warn('No assignable users found. Check user roles and status.')
+        // Don't show error toast - just log it, as empty list is valid
+      }
+    } catch (error) {
+      console.error('Failed to load assignees:', error)
+      // Handle 403 (Access Denied) silently - user doesn't have permission
+      if (error.message && error.message.includes('403')) {
+        console.log('User does not have permission to view users list. This is expected for some roles.')
+        setAssignees([])
+      } else if (error.message && error.message.includes('Access denied')) {
+        console.log('Access denied to users endpoint. User may not have required permissions.')
+        setAssignees([])
+      } else {
+        // Only show error for unexpected errors
+        console.error('Unexpected error loading assignees:', error)
+        // Don't show toast for permission errors, only for unexpected errors
+        if (!error.message || (!error.message.includes('403') && !error.message.includes('Access denied'))) {
+          toast.error('Failed to load assignees. Please check your permissions or contact admin.')
+        }
+        setAssignees([])
+      }
+    } finally {
+      setAssigneeLoading(false)
     }
   }
 
@@ -265,6 +322,19 @@ export const TicketDetail = () => {
     }
   }
 
+  const handleAssigneeChange = async (e) => {
+    const newAssignee = e.target.value || null
+    try {
+      const updatedTicket = await ticketsAPI.update(id, { assignee: newAssignee })
+      setTicket(updatedTicket)
+      toast.success(newAssignee ? 'Ticket assigned successfully' : 'Ticket unassigned')
+    } catch (error) {
+      toast.error(error.message || 'Failed to update assignee')
+    }
+  }
+
+  const canAssign = user?.role === 'admin' || user?.role === 'technician'
+
   if (loading || !ticket) {
     return (
       <Layout>
@@ -447,7 +517,7 @@ export const TicketDetail = () => {
                 <div>
                   <label className="text-sm font-medium text-gray-500 block mb-2">Status</label>
                   {/* Regular users can only view status, not edit */}
-                  {user?.role === 'admin' || user?.role === 'agent' || user?.role === 'technician' ? (
+                  {user?.role === 'admin' || user?.role === 'technician' ? (
                     <select
                       value={ticket.status}
                       onChange={handleStatusChange}
@@ -513,15 +583,39 @@ export const TicketDetail = () => {
 
                 <div>
                   <label className="text-sm font-medium text-gray-500 block mb-2">Assignee</label>
-                  <div className="flex items-center space-x-2">
-                    <User size={16} className="text-gray-400" />
-                    <p className="text-gray-900">{ticket.assignee?.name || 'Unassigned'}</p>
-                  </div>
+                  {canAssign ? (
+                    <div className="space-y-2">
+                      <select
+                        value={ticket.assignee?._id || ticket.assignee || ''}
+                        onChange={handleAssigneeChange}
+                        className="input w-full"
+                        disabled={assigneeLoading}
+                      >
+                        <option value="">Unassigned</option>
+                        {assignees.map((assignee) => (
+                          <option key={assignee._id || assignee.id} value={assignee._id || assignee.id}>
+                            {assignee.name} {assignee.role ? `(${assignee.role})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500">
+                        {assignees.length === 0 
+                          ? 'No assignable users found. Please ensure there are active technicians in the system.'
+                          : `Admins/Technicians can assign tickets. Current: ${ticket.assignee?.name || 'Unassigned'}`
+                        }
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex items-center space-x-2">
+                      <User size={16} className="text-gray-400" />
+                      <p className="text-gray-900">{ticket.assignee?.name || 'Unassigned'}</p>
+                    </div>
+                  )}
                 </div>
 
                 <div>
                   <label className="text-sm font-medium text-gray-500 block mb-2">Due Date</label>
-                  {user?.role === 'admin' || user?.role === 'agent' ? (
+                  {user?.role === 'admin' || user?.role === 'technician' ? (
                     <>
                       <button
                         type="button"

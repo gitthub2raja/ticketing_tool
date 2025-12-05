@@ -42,6 +42,7 @@ import { TeamsIntegration } from './pages/Admin/TeamsIntegration'
 import { FAQ } from './pages/Admin/FAQ'
 import { ChatHistory } from './pages/Admin/ChatHistory'
 import { BackupRestore } from './pages/Admin/BackupRestore'
+import { DomainRules } from './pages/Admin/DomainRules'
 
 // Reports Page
 import { Reports } from './pages/Reports'
@@ -229,6 +230,14 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <EmailSettings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/domain-rules"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DomainRules />
                 </ProtectedRoute>
               }
             />

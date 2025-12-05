@@ -13,7 +13,7 @@ import toast from 'react-hot-toast'
 
 export const Reports = () => {
   const { user } = useAuth()
-  const isAdmin = user?.role === 'admin' || user?.role === 'agent'
+  const isAdmin = user?.role === 'admin' || user?.role === 'technician'
   const [reportType, setReportType] = useState('daily')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')

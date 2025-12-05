@@ -23,7 +23,7 @@ export const TicketList = () => {
   const [departmentFilter, setDepartmentFilter] = useState('all')
   const [departments, setDepartments] = useState([])
   const navigate = useNavigate()
-  const isAdmin = user?.role === 'admin' || user?.role === 'agent'
+  const isAdmin = user?.role === 'admin' || user?.role === 'technician'
 
   // Update status filter when URL query parameter changes
   useEffect(() => {

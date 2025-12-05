@@ -55,6 +55,20 @@ const emailSettingsSchema = new mongoose.Schema({
       default: false,
     },
   },
+  domainRules: {
+    enabled: {
+      type: Boolean,
+      default: false,
+    },
+    whitelist: {
+      type: [String],
+      default: [],
+    },
+    blacklist: {
+      type: [String],
+      default: [],
+    },
+  },
 }, {
   timestamps: true,
 })

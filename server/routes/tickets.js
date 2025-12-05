@@ -16,6 +16,7 @@ router.get('/', protect, async (req, res) => {
   try {
     const { status, priority, search, organization, department } = req.query
     const query = {}
+    const andConditions = []
 
     // Filter by organization - admins can filter, others see only their org
     if (req.user.role === 'admin') {
@@ -26,28 +27,43 @@ router.get('/', protect, async (req, res) => {
       // If no organization filter, admins see all tickets (no org filter applied)
     } else if (req.user.organization) {
       // Non-admin users see tickets from their organization OR tickets with no organization
-      query.$or = [
-        { organization: req.user.organization },
-        { organization: null },
-        { organization: { $exists: false } }
-      ]
+      andConditions.push({
+        $or: [
+          { organization: req.user.organization },
+          { organization: null },
+          { organization: { $exists: false } }
+        ]
+      })
     } else {
       // User has no organization - show tickets with no organization
-      query.$or = [
-        { organization: null },
-        { organization: { $exists: false } }
-      ]
+      andConditions.push({
+        $or: [
+          { organization: null },
+          { organization: { $exists: false } }
+        ]
+      })
     }
 
     // Regular users can only see their own tickets
     // Agents see all tickets in their organization (they can see all org tickets)
     // Admins see all tickets
-    // Technicians see all tickets in their organization
+    // Technicians see tickets assigned to them OR tickets from their organization
     // Department heads see tickets from their department
     if (req.user.role === 'user') {
       query.creator = req.user._id
+    } else if (req.user.role === 'technician') {
+      // Technicians see tickets assigned to them OR tickets from their organization
+      const technicianConditions = []
+      technicianConditions.push({ assignee: req.user._id })
+      if (req.user.organization) {
+        technicianConditions.push({ organization: req.user.organization })
+      } else {
+        technicianConditions.push({ organization: null })
+        technicianConditions.push({ organization: { $exists: false } })
+      }
+      andConditions.push({ $or: technicianConditions })
     }
-    // Agents, admins, technicians, and department heads see all tickets in their organization/department (no creator filter)
+    // Agents, admins, and department heads see all tickets in their organization/department (no creator filter)
 
     if (status && status !== 'all') {
       query.status = status
@@ -55,11 +71,19 @@ router.get('/', protect, async (req, res) => {
     if (priority && priority !== 'all') {
       query.priority = priority
     }
+    
+    // Handle search - combine with organization filter properly
     if (search) {
-      query.$or = [
+      const searchConditions = [
         { title: { $regex: search, $options: 'i' } },
         { ticketId: { $regex: search, $options: 'i' } },
       ]
+      // Convert ticketId search to number if possible
+      const ticketIdNum = parseInt(search)
+      if (!isNaN(ticketIdNum)) {
+        searchConditions.push({ ticketId: ticketIdNum })
+      }
+      andConditions.push({ $or: searchConditions })
     }
 
     // Filter by department - admins can filter, department heads see only their department
@@ -78,6 +102,11 @@ router.get('/', protect, async (req, res) => {
     } else if (req.user.role === 'admin' && department) {
       // Admins can filter by department if provided
       query.department = department
+    }
+
+    // Combine all conditions with $and if we have multiple conditions
+    if (andConditions.length > 0) {
+      query.$and = andConditions
     }
 
     // Debug logging
@@ -135,8 +164,8 @@ router.get('/:id', protect, async (req, res) => {
     const userId = req.user._id.toString()
     const ticketCreatorId = ticket.creator?._id?.toString() || ticket.creator?.toString()
     
-    // Admins and agents can view all tickets
-    if (userRole === 'admin' || userRole === 'agent') {
+    // Admins and technicians can view all tickets
+    if (userRole === 'admin' || userRole === 'technician') {
       // Allow access
     }
     // Department heads can view tickets from their department
@@ -156,9 +185,14 @@ router.get('/:id', protect, async (req, res) => {
     else if (userRole === 'technician') {
       const ticketAssigneeId = ticket.assignee?._id?.toString() || ticket.assignee?.toString()
       const isAssigned = ticketAssigneeId === userId
-      const isSameOrg = ticket.organization?.toString() === req.user.organization?.toString()
+      const ticketOrgId = ticket.organization?._id?.toString() || ticket.organization?.toString()
+      const userOrgId = req.user.organization?.toString()
       
-      if (!isAssigned && !isSameOrg) {
+      // Allow if assigned to technician OR ticket is from same organization OR ticket has no organization and user has no organization
+      const isSameOrg = ticketOrgId === userOrgId
+      const bothNoOrg = !ticketOrgId && !userOrgId
+      
+      if (!isAssigned && !isSameOrg && !bothNoOrg) {
         return res.status(403).json({ message: 'Access denied. You can only view tickets assigned to you or from your organization.' })
       }
     }
@@ -331,7 +365,7 @@ router.put('/:id', protect, async (req, res) => {
     }
 
     // Regular users can only update their own tickets and only title/description
-    if (req.user.role !== 'admin' && req.user.role !== 'agent') {
+    if (req.user.role !== 'admin' && req.user.role !== 'technician') {
       // Check if user is the creator
       if (ticket.creator.toString() !== req.user._id.toString()) {
         return res.status(403).json({ message: 'You can only update your own tickets' })
@@ -348,10 +382,10 @@ router.put('/:id', protect, async (req, res) => {
     if (title) ticket.title = title
     if (description) ticket.description = description
     // Only admins/agents can update status, priority, assignee
-    if (status && (req.user.role === 'admin' || req.user.role === 'agent')) {
+    if (status && (req.user.role === 'admin' || req.user.role === 'technician')) {
       ticket.status = status
     }
-    if (priority && (req.user.role === 'admin' || req.user.role === 'agent')) {
+    if (priority && (req.user.role === 'admin' || req.user.role === 'technician')) {
       ticket.priority = priority
       // Recalculate SLA dates when priority changes
       const createdAt = ticket.createdAt || new Date()
@@ -395,7 +429,7 @@ router.put('/:id', protect, async (req, res) => {
       ticket.slaResolutionTime = slaPolicy.resolutionTime
     }
     const oldAssignee = ticket.assignee
-    if (assignee !== undefined && (req.user.role === 'admin' || req.user.role === 'agent')) {
+    if (assignee !== undefined && (req.user.role === 'admin' || req.user.role === 'technician')) {
       ticket.assignee = assignee
     }
 
@@ -866,11 +900,59 @@ router.get('/stats/dashboard', protect, async (req, res) => {
       { name: 'Urgent', value: priorityCounts.urgent, color: '#ff0080' }
     ].filter(item => item.value > 0) // Only include priorities that have tickets
 
-    // Get my open tickets (for current user) - use same base query logic as dashboard stats
-    // Query separately with status filter to get open and in-progress tickets
-    const myOpenTicketsQuery = {
-      ...baseQuery,
+    // Get my open tickets (for current user)
+    // Regular users: tickets they created
+    // Agents/Technicians: tickets assigned to them OR tickets they created
+    // Admins: all tickets (or filtered by organization)
+    let myOpenTicketsQuery = {
       status: { $in: ['open', 'in-progress'] } // Show both 'open' and 'in-progress' tickets
+    }
+    
+    if (req.user.role === 'user') {
+      // Regular users see only tickets they created
+      myOpenTicketsQuery.creator = req.user._id
+    } else if (req.user.role === 'technician') {
+      // Agents/Technicians see tickets assigned to them OR tickets they created
+      // Also filter by organization if user has one
+      const orConditions = [
+        { assignee: req.user._id },
+        { creator: req.user._id }
+      ]
+      
+      if (req.user.organization) {
+        // If user has organization, tickets must be from that org OR have no org
+        myOpenTicketsQuery.$and = [
+          {
+            $or: orConditions
+          },
+          {
+            $or: [
+              { organization: req.user.organization },
+              { organization: null },
+              { organization: { $exists: false } }
+            ]
+          }
+        ]
+      } else {
+        // If user has no organization, only show tickets with no organization
+        myOpenTicketsQuery.$and = [
+          {
+            $or: orConditions
+          },
+          {
+            $or: [
+              { organization: null },
+              { organization: { $exists: false } }
+            ]
+          }
+        ]
+      }
+    } else {
+      // Admins and department heads use baseQuery (already filtered by org/dept)
+      myOpenTicketsQuery = {
+        ...baseQuery,
+        status: { $in: ['open', 'in-progress'] }
+      }
     }
     
     const myOpenTickets = await Ticket.find(myOpenTicketsQuery)

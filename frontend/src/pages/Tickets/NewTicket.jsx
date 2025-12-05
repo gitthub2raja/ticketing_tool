@@ -16,6 +16,7 @@ import toast from 'react-hot-toast'
 
 export const NewTicket = () => {
   const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -57,7 +58,7 @@ export const NewTicket = () => {
       const data = await usersAPI.getAll()
       // Filter to only show agents and admins as potential assignees
       const agentsAndAdmins = data.filter(u => 
-        (u.role === 'agent' || u.role === 'admin') && u.status === 'active'
+        (u.role === 'technician' || u.role === 'admin') && u.status === 'active'
       )
       setAssignees(agentsAndAdmins)
     } catch (error) {
@@ -106,15 +107,17 @@ export const NewTicket = () => {
       if (formData.assignee) formDataToSend.append('assignee', formData.assignee)
 
       // Check for manual ticket ID setting
-      const useManualTicketId = localStorage.getItem('useManualTicketId') === 'true'
-      const manualTicketId = localStorage.getItem('manualTicketId')
-      if (useManualTicketId && manualTicketId) {
-        // Get the last used ticket ID from localStorage or use the manual ID
-        const lastUsedId = parseInt(localStorage.getItem('lastUsedTicketId') || manualTicketId)
-        const nextTicketId = lastUsedId + 1
-        formDataToSend.append('ticketId', nextTicketId.toString())
-        // Update last used ID for next ticket
-        localStorage.setItem('lastUsedTicketId', nextTicketId.toString())
+      if (isAdmin) {
+        const useManualTicketId = localStorage.getItem('useManualTicketId') === 'true'
+        const manualTicketId = localStorage.getItem('manualTicketId')
+        if (useManualTicketId && manualTicketId) {
+          // Get the last used ticket ID from localStorage or use the manual ID
+          const lastUsedId = parseInt(localStorage.getItem('lastUsedTicketId') || manualTicketId)
+          const nextTicketId = lastUsedId + 1
+          formDataToSend.append('ticketId', nextTicketId.toString())
+          // Update last used ID for next ticket
+          localStorage.setItem('lastUsedTicketId', nextTicketId.toString())
+        }
       }
 
       // Append files
