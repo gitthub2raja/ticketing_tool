@@ -8,6 +8,17 @@ const emailSettingsSchema = new mongoose.Schema({
     auth: {
       user: String,
       pass: String,
+      oauth2: {
+        enabled: {
+          type: Boolean,
+          default: false,
+        },
+        clientId: String,
+        clientSecret: String,
+        refreshToken: String,
+        accessToken: String,
+        expiresAt: Date,
+      },
     },
     fromEmail: String,
     fromName: String,
@@ -23,6 +34,17 @@ const emailSettingsSchema = new mongoose.Schema({
     auth: {
       user: String,
       pass: String,
+      oauth2: {
+        enabled: {
+          type: Boolean,
+          default: false,
+        },
+        clientId: String,
+        clientSecret: String,
+        refreshToken: String,
+        accessToken: String,
+        expiresAt: Date,
+      },
     },
     folder: {
       type: String,

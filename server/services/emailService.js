@@ -2,6 +2,78 @@ import nodemailer from 'nodemailer'
 import EmailSettings from '../models/EmailSettings.js'
 import EmailTemplate from '../models/EmailTemplate.js'
 
+// Refresh OAuth2 access token
+const refreshOAuth2Token = async (clientId, clientSecret, refreshToken) => {
+  try {
+    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+        scope: 'https://outlook.office.com/SMTP.Send https://outlook.office.com/IMAP.AccessAsUser.All offline_access',
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Token refresh failed: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return {
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + (data.expires_in * 1000)),
+      refreshToken: data.refresh_token || refreshToken,
+    }
+  } catch (error) {
+    console.error('OAuth2 token refresh error:', error)
+    throw error
+  }
+}
+
+// Get valid OAuth2 access token (refresh if needed)
+const getValidAccessToken = async (settings, type = 'smtp') => {
+  const auth = type === 'smtp' ? settings.smtp.auth : settings.imap.auth
+  
+  if (!auth?.oauth2?.enabled) {
+    return null
+  }
+
+  const oauth2 = auth.oauth2
+  const now = new Date()
+  
+  // Check if token is expired or will expire soon (within 5 minutes)
+  if (!oauth2.accessToken || !oauth2.expiresAt || oauth2.expiresAt <= new Date(now.getTime() + 5 * 60 * 1000)) {
+    console.log('Refreshing OAuth2 access token...')
+    const tokenData = await refreshOAuth2Token(
+      oauth2.clientId,
+      oauth2.clientSecret,
+      oauth2.refreshToken
+    )
+    
+    // Update settings with new token
+    oauth2.accessToken = tokenData.accessToken
+    oauth2.expiresAt = tokenData.expiresAt
+    oauth2.refreshToken = tokenData.refreshToken
+    
+    const emailSettings = await EmailSettings.getSettings()
+    if (type === 'smtp') {
+      emailSettings.smtp.auth.oauth2 = oauth2
+    } else {
+      emailSettings.imap.auth.oauth2 = oauth2
+    }
+    await emailSettings.save()
+    
+    return tokenData.accessToken
+  }
+  
+  return oauth2.accessToken
+}
+
 // Create SMTP transporter
 const createTransporter = async () => {
   const settings = await EmailSettings.getSettings()
@@ -17,21 +89,38 @@ const createTransporter = async () => {
     settings.smtp.host.includes('office.com')
   )
 
-  // Trim credentials to remove accidental spaces
-  const trimmedPassword = settings.smtp.auth.pass ? settings.smtp.auth.pass.trim() : ''
-  const trimmedUser = settings.smtp.auth.user ? settings.smtp.auth.user.trim() : ''
-  
   const transporterConfig = {
     host: settings.smtp.host,
     port: parseInt(settings.smtp.port),
     secure: false, // Office365 uses STARTTLS, not direct SSL
-    auth: {
-      user: trimmedUser,
-      pass: trimmedPassword,
-    },
     pool: false,
     maxConnections: 1,
     maxMessages: 1,
+  }
+
+  // Configure authentication (OAuth2 or password)
+  if (settings.smtp.auth?.oauth2?.enabled) {
+    // OAuth2 authentication
+    const accessToken = await getValidAccessToken(settings, 'smtp')
+    const trimmedUser = settings.smtp.auth.user ? settings.smtp.auth.user.trim() : ''
+    
+    transporterConfig.auth = {
+      type: 'OAuth2',
+      user: trimmedUser,
+      clientId: settings.smtp.auth.oauth2.clientId,
+      clientSecret: settings.smtp.auth.oauth2.clientSecret,
+      refreshToken: settings.smtp.auth.oauth2.refreshToken,
+      accessToken: accessToken,
+    }
+  } else {
+    // Password authentication
+    const trimmedPassword = settings.smtp.auth.pass ? settings.smtp.auth.pass.trim() : ''
+    const trimmedUser = settings.smtp.auth.user ? settings.smtp.auth.user.trim() : ''
+    
+    transporterConfig.auth = {
+      user: trimmedUser,
+      pass: trimmedPassword,
+    }
   }
 
   // Add Office365-specific settings
@@ -42,8 +131,10 @@ const createTransporter = async () => {
       rejectUnauthorized: false,
       minVersion: 'TLSv1.2',
     }
-    // Office365 specific: use LOGIN method explicitly
-    transporterConfig.authMethod = 'LOGIN'
+    // Office365 specific: use LOGIN method explicitly (unless OAuth2)
+    if (!settings.smtp.auth?.oauth2?.enabled) {
+      transporterConfig.authMethod = 'LOGIN'
+    }
     transporterConfig.service = 'smtp.office365.com'
     transporterConfig.connectionTimeout = 60000
     transporterConfig.greetingTimeout = 30000

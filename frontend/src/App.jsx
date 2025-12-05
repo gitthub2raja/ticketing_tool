@@ -36,6 +36,7 @@ import { Departments } from './pages/Admin/Departments'
 import { TicketImport } from './pages/Admin/TicketImport'
 import { Analytics } from './pages/Admin/Analytics'
 import { ApiKeys } from './pages/Admin/ApiKeys'
+import { ExternalIntegrations } from './pages/Admin/ExternalIntegrations'
 import { EmailAutomation } from './pages/Admin/EmailAutomation'
 import { TeamsIntegration } from './pages/Admin/TeamsIntegration'
 import { FAQ } from './pages/Admin/FAQ'
@@ -276,6 +277,14 @@ function App() {
               element={
                 <ProtectedRoute requireAdmin>
                   <ApiKeys />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/integrations"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <ExternalIntegrations />
                 </ProtectedRoute>
               }
             />

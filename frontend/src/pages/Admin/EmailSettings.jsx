@@ -118,8 +118,21 @@ export const EmailSettings = () => {
     e.preventDefault()
     setLoading(true)
     try {
+      // Build SMTP data structure that matches backend expectations
       const smtpData = {
-        ...smtpSettings,
+        host: smtpSettings.host,
+        port: smtpSettings.port,
+        encryption: smtpSettings.encryption,
+        username: smtpSettings.username,
+        password: smtpSettings.password,
+        fromEmail: smtpSettings.fromEmail,
+        fromName: smtpSettings.fromName,
+        useOAuth2: smtpSettings.useOAuth2, // Add this flag for backend
+        oauth2: smtpSettings.useOAuth2 ? {
+          clientId: smtpSettings.oauth2.clientId,
+          clientSecret: smtpSettings.oauth2.clientSecret,
+          refreshToken: smtpSettings.oauth2.refreshToken,
+        } : undefined,
         auth: smtpSettings.useOAuth2 ? {
           user: smtpSettings.username,
           oauth2: {
@@ -136,6 +149,7 @@ export const EmailSettings = () => {
       await adminAPI.updateEmailSettings({ smtp: smtpData })
       toast.success('SMTP settings saved successfully!')
     } catch (error) {
+      console.error('SMTP save error:', error)
       toast.error(error.message || 'Failed to save SMTP settings')
     } finally {
       setLoading(false)
@@ -146,8 +160,20 @@ export const EmailSettings = () => {
     e.preventDefault()
     setLoading(true)
     try {
+      // Build IMAP data structure that matches backend expectations
       const imapData = {
-        ...imapSettings,
+        host: imapSettings.host,
+        port: imapSettings.port,
+        encryption: imapSettings.encryption,
+        username: imapSettings.username,
+        password: imapSettings.password,
+        folder: imapSettings.folder,
+        useOAuth2: imapSettings.useOAuth2, // Add this flag for backend
+        oauth2: imapSettings.useOAuth2 ? {
+          clientId: imapSettings.oauth2.clientId,
+          clientSecret: imapSettings.oauth2.clientSecret,
+          refreshToken: imapSettings.oauth2.refreshToken,
+        } : undefined,
         auth: imapSettings.useOAuth2 ? {
           user: imapSettings.username,
           oauth2: {
@@ -164,6 +190,7 @@ export const EmailSettings = () => {
       await adminAPI.updateEmailSettings({ imap: imapData })
       toast.success('IMAP settings saved successfully!')
     } catch (error) {
+      console.error('IMAP save error:', error)
       toast.error(error.message || 'Failed to save IMAP settings')
     } finally {
       setLoading(false)
@@ -324,25 +351,91 @@ export const EmailSettings = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Username *"
-                value={smtpSettings.username}
-                onChange={(e) => setSmtpSettings({ ...smtpSettings, username: e.target.value })}
-                required
-                icon={<Mail size={20} />}
-                placeholder="your-email@example.com"
-              />
+            {/* Auth Mode for SMTP */}
+            <Select
+              label="Authentication Method"
+              value={smtpSettings.useOAuth2 ? 'oauth2' : 'password'}
+              onChange={(e) => setSmtpSettings({ ...smtpSettings, useOAuth2: e.target.value === 'oauth2' })}
+              options={[
+                { value: 'password', label: 'App Password' },
+                { value: 'oauth2', label: 'OAuth2' },
+              ]}
+            />
 
-              <Input
-                type="password"
-                label="Password *"
-                value={smtpSettings.password}
-                onChange={(e) => setSmtpSettings({ ...smtpSettings, password: e.target.value })}
-                required
-                icon={<Lock size={20} />}
-              />
-            </div>
+            {smtpSettings.useOAuth2 ? (
+              /* OAuth2 Configuration for SMTP */
+              <div className="space-y-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <h3 className="text-sm font-semibold text-blue-900 mb-3">OAuth2 Configuration</h3>
+                <Input
+                  label="Email Address *"
+                  value={smtpSettings.username}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, username: e.target.value })}
+                  required
+                  icon={<Mail size={20} />}
+                  placeholder="shared-email@example.com"
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Input
+                    label="Client ID *"
+                    value={smtpSettings.oauth2.clientId}
+                    onChange={(e) => setSmtpSettings({
+                      ...smtpSettings,
+                      oauth2: { ...smtpSettings.oauth2, clientId: e.target.value }
+                    })}
+                    required
+                    placeholder="Your OAuth2 Client ID"
+                  />
+                  <Input
+                    type="password"
+                    label="Client Secret *"
+                    value={smtpSettings.oauth2.clientSecret}
+                    onChange={(e) => setSmtpSettings({
+                      ...smtpSettings,
+                      oauth2: { ...smtpSettings.oauth2, clientSecret: e.target.value }
+                    })}
+                    required
+                    placeholder="Your OAuth2 Client Secret"
+                  />
+                </div>
+                <Input
+                  label="Refresh Token *"
+                  type="password"
+                  value={smtpSettings.oauth2.refreshToken}
+                  onChange={(e) => setSmtpSettings({
+                    ...smtpSettings,
+                    oauth2: { ...smtpSettings.oauth2, refreshToken: e.target.value }
+                  })}
+                  required
+                  placeholder="OAuth2 Refresh Token"
+                />
+                <p className="text-xs text-blue-700">
+                  OAuth2 allows secure authentication for shared email accounts without storing passwords.
+                  Generate credentials from your email provider's developer console (Microsoft Azure AD, Google Cloud Console, etc.).
+                </p>
+              </div>
+            ) : (
+              /* Username/Password Configuration for SMTP */
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Username *"
+                  value={smtpSettings.username}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, username: e.target.value })}
+                  required
+                  icon={<Mail size={20} />}
+                  placeholder="your-email@example.com"
+                />
+
+                <Input
+                  type="password"
+                  label="Password *"
+                  value={smtpSettings.password}
+                  onChange={(e) => setSmtpSettings({ ...smtpSettings, password: e.target.value })}
+                  required={!smtpSettings.useOAuth2}
+                  disabled={smtpSettings.useOAuth2}
+                  icon={<Lock size={20} />}
+                />
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Input
@@ -447,18 +540,16 @@ export const EmailSettings = () => {
             />
 
             {/* OAuth2 Toggle */}
-            <div className="flex items-center gap-2 p-4 bg-gray-50 rounded-lg border">
-              <input
-                type="checkbox"
-                id="imap-oauth2"
-                checked={imapSettings.useOAuth2}
-                onChange={(e) => setImapSettings({ ...imapSettings, useOAuth2: e.target.checked })}
-                className="w-4 h-4 rounded border-gray-300"
-              />
-              <label htmlFor="imap-oauth2" className="text-sm font-medium text-gray-700 cursor-pointer">
-                Use OAuth2 for Shared Email Authentication
-              </label>
-            </div>
+            {/* Auth Mode for IMAP */}
+            <Select
+              label="Authentication Method"
+              value={imapSettings.useOAuth2 ? 'oauth2' : 'password'}
+              onChange={(e) => setImapSettings({ ...imapSettings, useOAuth2: e.target.value === 'oauth2' })}
+              options={[
+                { value: 'password', label: 'App Password' },
+                { value: 'oauth2', label: 'OAuth2' },
+              ]}
+            />
 
             {imapSettings.useOAuth2 ? (
               /* OAuth2 Configuration */

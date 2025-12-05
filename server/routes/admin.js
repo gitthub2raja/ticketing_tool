@@ -70,15 +70,32 @@ router.put('/email', protect, admin, async (req, res) => {
         secure = smtp.encryption === 'ssl' || (smtp.encryption === 'tls' && smtp.port === '465')
       }
       
+      // Build auth object - support both OAuth2 and password auth
+      const authConfig = {}
+      if (smtp.auth?.oauth2?.enabled || smtp.useOAuth2) {
+        // OAuth2 authentication
+        authConfig.user = trimmedUsername
+        authConfig.oauth2 = {
+          enabled: true,
+          clientId: smtp.auth?.oauth2?.clientId || smtp.oauth2?.clientId || '',
+          clientSecret: smtp.auth?.oauth2?.clientSecret || smtp.oauth2?.clientSecret || '',
+          refreshToken: smtp.auth?.oauth2?.refreshToken || smtp.oauth2?.refreshToken || '',
+        }
+      } else {
+        // Password authentication
+        authConfig.user = trimmedUsername
+        authConfig.pass = trimmedPassword
+        authConfig.oauth2 = {
+          enabled: false,
+        }
+      }
+      
       settings.smtp = {
         ...settings.smtp,
         host: smtp.host ? smtp.host.trim() : '',
         port: parseInt(smtp.port) || 587,
         secure: secure,
-        auth: {
-          user: trimmedUsername,
-          pass: trimmedPassword,
-        },
+        auth: authConfig,
         fromEmail: smtp.fromEmail ? smtp.fromEmail.trim() : '',
         fromName: smtp.fromName ? smtp.fromName.trim() : '',
         enabled: true,
@@ -93,15 +110,32 @@ router.put('/email', protect, admin, async (req, res) => {
       const trimmedUsername = imap.username ? imap.username.trim() : ''
       const trimmedPassword = imap.password ? imap.password.trim() : ''
       
+      // Build auth object - support both OAuth2 and password auth
+      const authConfig = {}
+      if (imap.auth?.oauth2?.enabled || imap.useOAuth2) {
+        // OAuth2 authentication
+        authConfig.user = trimmedUsername
+        authConfig.oauth2 = {
+          enabled: true,
+          clientId: imap.auth?.oauth2?.clientId || imap.oauth2?.clientId || '',
+          clientSecret: imap.auth?.oauth2?.clientSecret || imap.oauth2?.clientSecret || '',
+          refreshToken: imap.auth?.oauth2?.refreshToken || imap.oauth2?.refreshToken || '',
+        }
+      } else {
+        // Password authentication
+        authConfig.user = trimmedUsername
+        authConfig.pass = trimmedPassword
+        authConfig.oauth2 = {
+          enabled: false,
+        }
+      }
+      
       settings.imap = {
         ...settings.imap,
         host: imap.host ? imap.host.trim() : '',
         port: imap.port,
         secure: secure,
-        auth: {
-          user: trimmedUsername,
-          pass: trimmedPassword,
-        },
+        auth: authConfig,
         folder: imap.folder || 'INBOX',
         enabled: true,
       }

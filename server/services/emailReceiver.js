@@ -5,6 +5,74 @@ import Ticket from '../models/Ticket.js'
 import User from '../models/User.js'
 import { sendTicketAcknowledgment } from './emailService.js'
 
+// Refresh OAuth2 access token for IMAP
+const refreshOAuth2Token = async (clientId, clientSecret, refreshToken) => {
+  try {
+    const response = await fetch('https://login.microsoftonline.com/common/oauth2/v2.0/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: 'refresh_token',
+        scope: 'https://outlook.office.com/IMAP.AccessAsUser.All offline_access',
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Token refresh failed: ${response.statusText}`)
+    }
+
+    const data = await response.json()
+    return {
+      accessToken: data.access_token,
+      expiresAt: new Date(Date.now() + (data.expires_in * 1000)),
+      refreshToken: data.refresh_token || refreshToken,
+    }
+  } catch (error) {
+    console.error('OAuth2 token refresh error:', error)
+    throw error
+  }
+}
+
+// Get valid OAuth2 access token for IMAP
+const getValidIMAPAccessToken = async (settings) => {
+  const auth = settings.imap.auth
+  
+  if (!auth?.oauth2?.enabled) {
+    return null
+  }
+
+  const oauth2 = auth.oauth2
+  const now = new Date()
+  
+  // Check if token is expired or will expire soon (within 5 minutes)
+  if (!oauth2.accessToken || !oauth2.expiresAt || oauth2.expiresAt <= new Date(now.getTime() + 5 * 60 * 1000)) {
+    console.log('Refreshing OAuth2 access token for IMAP...')
+    const tokenData = await refreshOAuth2Token(
+      oauth2.clientId,
+      oauth2.clientSecret,
+      oauth2.refreshToken
+    )
+    
+    // Update settings with new token
+    oauth2.accessToken = tokenData.accessToken
+    oauth2.expiresAt = tokenData.expiresAt
+    oauth2.refreshToken = tokenData.refreshToken
+    
+    const emailSettings = await EmailSettings.getSettings()
+    emailSettings.imap.auth.oauth2 = oauth2
+    await emailSettings.save()
+    
+    return tokenData.accessToken
+  }
+  
+  return oauth2.accessToken
+}
+
 // Store processed email UIDs to avoid duplicates
 const processedEmails = new Set()
 
@@ -147,15 +215,36 @@ export const checkEmails = async () => {
       return
     }
     
-    return new Promise((resolve, reject) => {
-      const imap = new Imap({
-        user: settings.imap.auth.user,
-        password: settings.imap.auth.pass,
+    return new Promise(async (resolve, reject) => {
+      // Build IMAP config
+      const imapConfig = {
         host: settings.imap.host,
         port: settings.imap.port,
         tls: settings.imap.secure || false,
         tlsOptions: { rejectUnauthorized: false },
-      })
+      }
+
+      // Configure authentication (OAuth2 or password)
+      if (settings.imap.auth?.oauth2?.enabled) {
+        // OAuth2 authentication - get access token
+        try {
+          const accessToken = await getValidIMAPAccessToken(settings)
+          imapConfig.user = settings.imap.auth.user
+          imapConfig.xoauth2 = accessToken
+          // Note: The 'imap' package has limited OAuth2 support
+          // For full OAuth2 support, consider using 'imap-simple' or 'node-imap' with xoauth2 plugin
+          console.log('Using OAuth2 for IMAP authentication')
+        } catch (error) {
+          console.error('Failed to get OAuth2 token for IMAP:', error)
+          return reject(new Error('OAuth2 authentication failed for IMAP'))
+        }
+      } else {
+        // Password authentication
+        imapConfig.user = settings.imap.auth.user
+        imapConfig.password = settings.imap.auth.pass
+      }
+
+      const imap = new Imap(imapConfig)
       
       imap.once('ready', () => {
         imap.openBox('INBOX', false, (err, box) => {

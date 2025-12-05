@@ -29,7 +29,8 @@ import {
   CheckCircle,
   XCircle,
   Info,
-  Edit3
+  Edit3,
+  Plug
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useLogo } from '../../contexts/LogoContext'
@@ -64,6 +65,7 @@ const adminMenuItems = [
   { path: '/admin/tickets/import', icon: Upload, label: 'Import Tickets' },
   { path: '/admin/analytics', icon: BarChart3, label: 'Analytics' },
   { path: '/admin/api-keys', icon: Key, label: 'API Keys' },
+  { path: '/admin/integrations', icon: Plug, label: 'External Integrations' },
   { path: '/admin/email', icon: Mail, label: 'Email Settings' },
   { path: '/admin/email-templates', icon: FileCode, label: 'Email Templates' },
   { path: '/admin/email-automation', icon: Send, label: 'Email Automation' },

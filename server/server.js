@@ -31,6 +31,7 @@ import chatbotRoutes from './routes/chatbot.js'
 import faqRoutes from './routes/faq.js'
 import teamsRoutes from './routes/teams.js'
 import backupRoutes from './routes/backup.js'
+import integrationRoutes from './routes/integrations.js'
 
 dotenv.config()
 
@@ -91,6 +92,7 @@ app.use('/api/chatbot', chatbotRoutes)
 app.use('/api/faq', faqRoutes)
 app.use('/api/teams', teamsRoutes)
 app.use('/api/backup', backupRoutes)
+app.use('/api/integrations', integrationRoutes)
 
 // Health check
 app.get('/api/health', (req, res) => {

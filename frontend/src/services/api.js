@@ -530,6 +530,36 @@ export const reportsAPI = {
   },
 }
 
+// External Integrations API (Admin only)
+export const integrationsAPI = {
+  getAll: async (organization = null, type = null) => {
+    const params = new URLSearchParams()
+    if (organization) params.append('organization', organization)
+    if (type) params.append('type', type)
+    return apiCall(`/integrations?${params.toString()}`)
+  },
+  getById: async (id) => {
+    return apiCall(`/integrations/${id}`)
+  },
+  create: async (integrationData) => {
+    return apiCall('/integrations', {
+      method: 'POST',
+      body: JSON.stringify(integrationData),
+    })
+  },
+  update: async (id, integrationData) => {
+    return apiCall(`/integrations/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(integrationData),
+    })
+  },
+  delete: async (id) => {
+    return apiCall(`/integrations/${id}`, {
+      method: 'DELETE',
+    })
+  },
+}
+
 // API Keys API (Admin only)
 export const apiKeysAPI = {
   getAll: async (organization = null) => {
