@@ -68,7 +68,11 @@ export const NewTicket = () => {
   }
 
   const handleFileChange = (e) => {
-    const files = Array.from(e.target.files)
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    
+    console.log('Files selected:', files.length)
+    
     // Limit to 10 files and 10MB per file
     const validFiles = files.filter(file => {
       if (file.size > 10 * 1024 * 1024) {
@@ -78,7 +82,13 @@ export const NewTicket = () => {
       return true
     }).slice(0, 10 - selectedFiles.length)
     
-    setSelectedFiles([...selectedFiles, ...validFiles])
+    if (validFiles.length > 0) {
+      setSelectedFiles([...selectedFiles, ...validFiles])
+      toast.success(`${validFiles.length} file(s) added`)
+    }
+    
+    // Reset input to allow selecting the same file again
+    e.target.value = ''
   }
 
   const removeFile = (index) => {
@@ -239,7 +249,10 @@ export const NewTicket = () => {
                 Attachments (Optional)
               </label>
               <div className="border-2 border-cyber-neon-cyan/30 rounded-lg p-4 bg-cyber-darker/30">
-                <label className="flex items-center justify-center w-full h-32 border-2 border-dashed border-cyber-neon-cyan/50 rounded-lg cursor-pointer hover:border-cyber-neon-cyan transition-all duration-300">
+                <label 
+                  htmlFor="file-upload"
+                  className="relative flex items-center justify-center w-full h-32 border-2 border-dashed border-cyber-neon-cyan/50 rounded-lg cursor-pointer hover:border-cyber-neon-cyan transition-all duration-300"
+                >
                   <div className="flex flex-col items-center">
                     <Upload size={24} className="text-cyber-neon-cyan mb-2" />
                     <span className="text-sm text-cyber-neon-cyan/80 font-mono">
@@ -250,10 +263,11 @@ export const NewTicket = () => {
                     </span>
                   </div>
                   <input
+                    id="file-upload"
                     type="file"
                     multiple
                     onChange={handleFileChange}
-                    className="hidden"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt,.csv"
                   />
                 </label>

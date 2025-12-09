@@ -1,4 +1,5 @@
 import express from 'express'
+import multer from 'multer'
 import Ticket from '../models/Ticket.js'
 import User from '../models/User.js'
 import SLAPolicy from '../models/SLAPolicy.js'
@@ -217,8 +218,35 @@ router.get('/:id', protect, async (req, res) => {
 // @route   POST /api/tickets
 // @desc    Create new ticket
 // @access  Private
-router.post('/', protect, upload.array('attachments', 10), async (req, res) => {
+router.post('/', protect, (req, res, next) => {
+  // Handle multer errors
+  upload.array('attachments', 10)(req, res, (err) => {
+    if (err) {
+      console.error('File upload error:', err)
+      if (err instanceof multer.MulterError) {
+        if (err.code === 'LIMIT_FILE_SIZE') {
+          return res.status(400).json({ message: 'File too large. Maximum size is 10MB per file.' })
+        }
+        if (err.code === 'LIMIT_FILE_COUNT') {
+          return res.status(400).json({ message: 'Too many files. Maximum 10 files allowed.' })
+        }
+        if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+          return res.status(400).json({ message: 'Unexpected file field name. Use "attachments".' })
+        }
+        return res.status(400).json({ message: `File upload error: ${err.message}` })
+      }
+      return res.status(400).json({ message: err.message || 'File upload failed' })
+    }
+    next()
+  })
+}, async (req, res) => {
   try {
+    console.log('POST /api/tickets - Request body:', req.body)
+    console.log('POST /api/tickets - Files:', req.files ? req.files.length : 0, 'files')
+    if (req.files && req.files.length > 0) {
+      console.log('POST /api/tickets - File details:', req.files.map(f => ({ name: f.originalname, size: f.size, mimetype: f.mimetype })))
+    }
+    
     const { title, description, category, priority, assignee, ticketId } = req.body
     const ticketPriority = priority || 'medium'
     const createdAt = new Date()

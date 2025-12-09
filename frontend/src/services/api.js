@@ -96,16 +96,29 @@ export const ticketsAPI = {
   },
   createWithFiles: async (formData) => {
     const token = localStorage.getItem('token')
+    
+    // Log FormData contents for debugging
+    console.log('FormData entries:')
+    for (const [key, value] of formData.entries()) {
+      if (value instanceof File) {
+        console.log(`  ${key}: File(${value.name}, ${value.size} bytes, ${value.type})`)
+      } else {
+        console.log(`  ${key}: ${value}`)
+      }
+    }
+    
     const response = await fetch(`${API_BASE_URL}/tickets`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
+        // Don't set Content-Type - browser will set it with boundary for multipart/form-data
       },
       body: formData,
     })
     
     if (!response.ok) {
-      const error = await response.json()
+      const error = await response.json().catch(() => ({ message: 'Unknown error occurred' }))
+      console.error('Ticket creation error:', error)
       throw new Error(error.message || 'Failed to create ticket')
     }
     
