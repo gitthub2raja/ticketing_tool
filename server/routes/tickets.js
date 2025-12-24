@@ -10,6 +10,16 @@ import { calculateDueDate, calculateResponseDueDate, SLA_POLICIES } from '../con
 
 const router = express.Router()
 
+// Helper function to get organization ID (handles both ObjectId and populated object)
+// This function is used across multiple routes
+const getUserOrganizationId = (userOrg) => {
+  if (!userOrg) return null
+  // If it's an object with _id, extract it
+  if (userOrg._id) return userOrg._id
+  // If it's already an ObjectId or string, return it
+  return userOrg
+}
+
 // @route   GET /api/tickets
 // @desc    Get all tickets (users only see their own, admins/agents see all)
 // @access  Private
@@ -18,15 +28,6 @@ router.get('/', protect, async (req, res) => {
     const { status, priority, search, organization, department } = req.query
     const query = {}
     const andConditions = []
-
-    // Helper function to get organization ID (handles both ObjectId and populated object)
-    const getUserOrganizationId = (userOrg) => {
-      if (!userOrg) return null
-      // If it's an object with _id, extract it
-      if (userOrg._id) return userOrg._id
-      // If it's already an ObjectId or string, return it
-      return userOrg
-    }
 
     // Filter by organization - admins can filter, others see only their org
     const userOrgId = getUserOrganizationId(req.user.organization)
@@ -63,21 +64,14 @@ router.get('/', protect, async (req, res) => {
     // Regular users can only see their own tickets
     // Agents see all tickets in their organization (they can see all org tickets)
     // Admins see all tickets
-    // Technicians see tickets assigned to them OR tickets from their organization
+    // Technicians see ONLY tickets assigned to them
     // Department heads see tickets from their department
     if (req.user.role === 'user') {
       query.creator = req.user._id
     } else if (req.user.role === 'technician') {
-      // Technicians see tickets assigned to them OR tickets from their organization
-      const technicianConditions = []
-      technicianConditions.push({ assignee: req.user._id })
-      if (userOrgId) {
-        technicianConditions.push({ organization: userOrgId })
-      } else {
-        technicianConditions.push({ organization: null })
-        technicianConditions.push({ organization: { $exists: false } })
-      }
-      andConditions.push({ $or: technicianConditions })
+      // Technicians see ONLY tickets assigned to them
+      query.assignee = req.user._id
+      console.log('GET /api/tickets - Technician - Filtering by assignee:', req.user._id)
     }
     // Agents, admins, and department heads see all tickets in their organization/department (no creator filter)
 
@@ -205,6 +199,7 @@ router.get('/:id', protect, async (req, res) => {
       .populate('creator', 'name email')
       .populate('assignee', 'name email')
       .populate('department', 'name')
+      .populate('approvedBy', 'name email')
       .populate('comments.author', 'name email')
       .populate('comments.mentions', 'name email')
 
@@ -884,15 +879,6 @@ router.get('/stats/dashboard', protect, async (req, res) => {
   try {
     const { organization } = req.query
     
-    // Helper function to get organization ID (handles both ObjectId and populated object)
-    const getUserOrganizationId = (userOrg) => {
-      if (!userOrg) return null
-      // If it's an object with _id, extract it
-      if (userOrg._id) return userOrg._id
-      // If it's already an ObjectId or string, return it
-      return userOrg
-    }
-    
     // Build base query with organization filter
     let baseQuery = {}
     const userOrgId = getUserOrganizationId(req.user.organization)
@@ -949,11 +935,15 @@ router.get('/stats/dashboard', protect, async (req, res) => {
     // Regular users only see their own tickets
     // Agents see all tickets in their organization (they can see all org tickets)
     // Admins see all tickets (or filtered by organization)
-    // Technicians see all tickets in their organization
+    // Technicians see ONLY tickets assigned to them
     if (req.user.role === 'user') {
       baseQuery.creator = req.user._id
+    } else if (req.user.role === 'technician') {
+      // Technicians see ONLY tickets assigned to them
+      baseQuery.assignee = req.user._id
+      console.log('GET /api/tickets/stats/dashboard - Technician - Filtering by assignee:', req.user._id)
     }
-    // Agents, admins, technicians, and department heads see all tickets in their organization/department (no creator filter)
+    // Agents, admins, and department heads see all tickets in their organization/department (no creator filter)
 
     const totalTickets = await Ticket.countDocuments(baseQuery)
     const openTickets = await Ticket.countDocuments({ ...baseQuery, status: 'open' })
@@ -1058,42 +1048,8 @@ router.get('/stats/dashboard', protect, async (req, res) => {
       // Regular users see only tickets they created
       myOpenTicketsQuery.creator = req.user._id
     } else if (req.user.role === 'technician') {
-      // Agents/Technicians see tickets assigned to them OR tickets they created
-      // Also filter by organization if user has one
-      const orConditions = [
-        { assignee: req.user._id },
-        { creator: req.user._id }
-      ]
-      
-      const techUserOrgId = getUserOrganizationId(req.user.organization)
-      if (techUserOrgId) {
-        // If user has organization, tickets must be from that org OR have no org
-        myOpenTicketsQuery.$and = [
-          {
-            $or: orConditions
-          },
-          {
-            $or: [
-              { organization: techUserOrgId },
-              { organization: null },
-              { organization: { $exists: false } }
-            ]
-          }
-        ]
-      } else {
-        // If user has no organization, only show tickets with no organization
-        myOpenTicketsQuery.$and = [
-          {
-            $or: orConditions
-          },
-          {
-            $or: [
-              { organization: null },
-              { organization: { $exists: false } }
-            ]
-          }
-        ]
-      }
+      // Technicians see ONLY tickets assigned to them
+      myOpenTicketsQuery.assignee = req.user._id
     } else {
       // Admins and department heads use baseQuery (already filtered by org/dept)
       myOpenTicketsQuery = {

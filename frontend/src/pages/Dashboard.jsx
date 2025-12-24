@@ -177,18 +177,23 @@ export const Dashboard = () => {
         }))
         setPriorityData(priorityWithPercentages)
       } else if (isAgentOrTechnician) {
-        // For technicians: show tickets assigned to them OR tickets they created
+        // For technicians: show ONLY tickets assigned to them (backend already filters)
         const myOpenTicketsList = data.myOpenTickets || []
         
-        // Get all tickets (assigned to them or created by them) for stats
+        // Get all tickets assigned to technician (backend filters by assignee)
         const allMyTickets = await ticketsAPI.getAll()
         
-        // Calculate stats for technician tickets
+        // Calculate stats for technician tickets (only assigned tickets)
         const myStats = {
           totalTickets: allMyTickets.length || 0,
           openTickets: allMyTickets.filter(t => t.status === 'open').length || 0,
+          approvalPendingTickets: allMyTickets.filter(t => t.status === 'approval-pending').length || 0,
+          approvedTickets: allMyTickets.filter(t => t.status === 'approved').length || 0,
+          rejectedTickets: allMyTickets.filter(t => t.status === 'rejected').length || 0,
+          inProgressTickets: allMyTickets.filter(t => t.status === 'in-progress').length || 0,
+          resolvedTickets: allMyTickets.filter(t => t.status === 'resolved').length || 0,
+          closedTickets: allMyTickets.filter(t => t.status === 'closed').length || 0,
           pendingTickets: allMyTickets.filter(t => t.status === 'open' || t.status === 'in-progress').length || 0,
-          closedTickets: allMyTickets.filter(t => t.status === 'closed' || t.status === 'resolved').length || 0,
           overdueTickets: allMyTickets.filter(t => {
             if (!t.dueDate) return false
             const due = new Date(t.dueDate)
@@ -201,14 +206,14 @@ export const Dashboard = () => {
         setMyOpenTickets(myOpenTicketsList)
         setRecentTickets(data.recentTickets || [])
         
-        // Status distribution for technician tickets
+        // Status distribution for technician tickets (only assigned tickets)
         const statusCounts = {}
         allMyTickets.forEach(ticket => {
           statusCounts[ticket.status] = (statusCounts[ticket.status] || 0) + 1
         })
         setStatusData(Object.entries(statusCounts).map(([name, value]) => ({ name, value })))
         
-        // Priority distribution for technician tickets
+        // Priority distribution for technician tickets (only assigned tickets)
         const priorityCounts = {}
         allMyTickets.forEach(ticket => {
           priorityCounts[ticket.priority] = (priorityCounts[ticket.priority] || 0) + 1
