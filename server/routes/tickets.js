@@ -19,18 +19,33 @@ router.get('/', protect, async (req, res) => {
     const query = {}
     const andConditions = []
 
+    // Helper function to get organization ID (handles both ObjectId and populated object)
+    const getUserOrganizationId = (userOrg) => {
+      if (!userOrg) return null
+      // If it's an object with _id, extract it
+      if (userOrg._id) return userOrg._id
+      // If it's already an ObjectId or string, return it
+      return userOrg
+    }
+
     // Filter by organization - admins can filter, others see only their org
+    const userOrgId = getUserOrganizationId(req.user.organization)
+    
     if (req.user.role === 'admin') {
       // Admins can filter by organization if provided, otherwise see all tickets
       if (organization) {
         query.organization = organization
       }
       // If no organization filter, admins see all tickets (no org filter applied)
-    } else if (req.user.organization) {
+    } else if (req.user.role === 'department-head' && userOrgId) {
+      // Department heads must see tickets from their organization (strict match)
+      query.organization = userOrgId
+      console.log('GET /api/tickets - Department Head - Filtering by organization:', userOrgId)
+    } else if (userOrgId) {
       // Non-admin users see tickets from their organization OR tickets with no organization
       andConditions.push({
         $or: [
-          { organization: req.user.organization },
+          { organization: userOrgId },
           { organization: null },
           { organization: { $exists: false } }
         ]
@@ -56,8 +71,8 @@ router.get('/', protect, async (req, res) => {
       // Technicians see tickets assigned to them OR tickets from their organization
       const technicianConditions = []
       technicianConditions.push({ assignee: req.user._id })
-      if (req.user.organization) {
-        technicianConditions.push({ organization: req.user.organization })
+      if (userOrgId) {
+        technicianConditions.push({ organization: userOrgId })
       } else {
         technicianConditions.push({ organization: null })
         technicianConditions.push({ organization: { $exists: false } })
@@ -91,10 +106,15 @@ router.get('/', protect, async (req, res) => {
     if (req.user.role === 'department-head') {
       const user = await User.findById(req.user._id).populate('department')
       console.log('GET /api/tickets - Department Head - User department:', user.department?._id || user.department || 'None')
+      console.log('GET /api/tickets - Department Head - User organization:', userOrgId || 'None')
       if (user.department) {
         // Ensure tickets have a department and match the department head's department
         query.department = user.department._id
         console.log('GET /api/tickets - Department Head - Filtering by department:', user.department._id)
+        // Organization filter is already set above for department heads
+        if (userOrgId) {
+          console.log('GET /api/tickets - Department Head - Filtering by organization:', userOrgId)
+        }
       } else {
         // Department head without department assigned - return empty array
         console.log('GET /api/tickets - Department Head - No department assigned to user')
@@ -114,7 +134,8 @@ router.get('/', protect, async (req, res) => {
     console.log('GET /api/tickets - Status filter:', status)
     console.log('GET /api/tickets - Query:', JSON.stringify(query, null, 2))
     console.log('GET /api/tickets - User role:', req.user.role)
-    console.log('GET /api/tickets - User organization:', req.user.organization)
+    console.log('GET /api/tickets - User organization (raw):', req.user.organization)
+    console.log('GET /api/tickets - User organization ID:', userOrgId)
     console.log('GET /api/tickets - Organization filter:', organization)
     
     const tickets = await Ticket.find(query)
@@ -126,6 +147,37 @@ router.get('/', protect, async (req, res) => {
       .sort({ createdAt: -1 })
 
     console.log('GET /api/tickets - Tickets found:', tickets.length)
+    
+    // For department heads, also check what tickets exist without filters to debug
+    if (req.user.role === 'department-head') {
+      if (tickets.length === 0) {
+        // Check what approval-pending tickets exist (without department/org filters)
+        const allPendingTickets = await Ticket.find({ status: 'approval-pending' })
+          .populate('department', 'name')
+          .populate('organization', 'name')
+          .limit(10)
+        
+        console.log('GET /api/tickets - Department Head - Total approval-pending tickets in DB:', allPendingTickets.length)
+        console.log('GET /api/tickets - Department Head - Sample approval-pending tickets:', allPendingTickets.map(t => ({
+          id: t.ticketId,
+          title: t.title,
+          status: t.status,
+          department: t.department?._id?.toString() || t.department?.toString() || 'None',
+          departmentName: t.department?.name || 'None',
+          organization: t.organization?._id?.toString() || t.organization?.toString() || 'None',
+          organizationName: t.organization?.name || 'None'
+        })))
+      } else {
+        console.log('GET /api/tickets - Department Head - Sample tickets:', tickets.slice(0, 3).map(t => ({
+          id: t.ticketId,
+          status: t.status,
+          department: t.department?._id?.toString() || t.department?.toString() || 'None',
+          departmentName: t.department?.name || 'None',
+          organization: t.organization?._id?.toString() || t.organization?.toString() || 'None',
+          organizationName: t.organization?.name || 'None'
+        })))
+      }
+    }
     if (status === 'approved') {
       const approvedTickets = tickets.filter(t => t.status === 'approved')
       console.log('GET /api/tickets - Approved tickets in results:', approvedTickets.length)
@@ -169,7 +221,7 @@ router.get('/:id', protect, async (req, res) => {
     if (userRole === 'admin' || userRole === 'technician') {
       // Allow access
     }
-    // Department heads can view tickets from their department
+    // Department heads can view tickets from their department AND organization
     else if (userRole === 'department-head') {
       const user = await User.findById(req.user._id).populate('department')
       if (!user.department) {
@@ -178,8 +230,19 @@ router.get('/:id', protect, async (req, res) => {
       const userDeptId = user.department._id.toString()
       const ticketDeptId = ticket.department?._id?.toString() || ticket.department?.toString()
       
+      // Check department match
       if (ticketDeptId !== userDeptId) {
         return res.status(403).json({ message: 'Access denied. You can only view tickets from your department.' })
+      }
+      
+      // Check organization match (if user has organization)
+      const userOrgIdForCheck = getUserOrganizationId(req.user.organization)
+      if (userOrgIdForCheck) {
+        const userOrgIdStr = userOrgIdForCheck.toString()
+        const ticketOrgId = ticket.organization?._id?.toString() || ticket.organization?.toString()
+        if (ticketOrgId && ticketOrgId !== userOrgIdStr) {
+          return res.status(403).json({ message: 'Access denied. You can only view tickets from your organization.' })
+        }
       }
     }
     // Technicians can view tickets they're assigned to or from their organization
@@ -485,6 +548,42 @@ router.put('/:id', protect, async (req, res) => {
       })
     }
 
+    // If status changed to approval-pending, notify department head
+    if (status && status === 'approval-pending' && updatedTicket.department) {
+      import('../services/emailService.js').then(async ({ sendEmail }) => {
+        try {
+          const department = await Department.findById(updatedTicket.department._id || updatedTicket.department).populate('head')
+          if (department?.head?.email) {
+            const subject = `Ticket #${updatedTicket.ticketId} Pending Approval - ${updatedTicket.title}`
+            const html = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #f59e0b;">Ticket Pending Approval</h2>
+                <p>Dear ${department.head.name || 'Department Head'},</p>
+                <p>A ticket has been moved to <strong style="color: #f59e0b;">Approval Pending</strong> status and requires your review.</p>
+                <div style="background: #fffbeb; border-left: 4px solid #f59e0b; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                  <h3 style="margin-top: 0; color: #f59e0b;">Ticket Details:</h3>
+                  <p><strong>Ticket ID:</strong> #${updatedTicket.ticketId}</p>
+                  <p><strong>Title:</strong> ${updatedTicket.title}</p>
+                  <p><strong>Status:</strong> <span style="color: #f59e0b; font-weight: bold;">APPROVAL PENDING</span></p>
+                  <p><strong>Priority:</strong> ${updatedTicket.priority.toUpperCase()}</p>
+                  <p><strong>Category:</strong> ${updatedTicket.category}</p>
+                  <p><strong>Created By:</strong> ${updatedTicket.creator?.name || 'Unknown'}</p>
+                  <p><strong>Department:</strong> ${department.name}</p>
+                  <p><strong>Created:</strong> ${new Date(updatedTicket.createdAt).toLocaleString()}</p>
+                </div>
+                <p>Please review and approve or reject this ticket.</p>
+                <p><a href="${process.env.FRONTEND_URL || 'http://localhost'}/tickets/${updatedTicket.ticketId}" style="background: #f59e0b; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display: inline-block; margin-top: 10px;">Review Ticket</a></p>
+                <p>Best regards,<br>Support Team</p>
+              </div>
+            `
+            await sendEmail(department.head.email, subject, html)
+          }
+        } catch (err) {
+          console.error('Department head notification error:', err)
+        }
+      })
+    }
+
     // Send email to assignee if newly assigned
     if (assignee !== undefined && assignee?.toString() !== oldAssignee?.toString() && updatedTicket.assignee?.email) {
       import('../services/emailService.js').then(({ sendEmail }) => {
@@ -785,8 +884,18 @@ router.get('/stats/dashboard', protect, async (req, res) => {
   try {
     const { organization } = req.query
     
+    // Helper function to get organization ID (handles both ObjectId and populated object)
+    const getUserOrganizationId = (userOrg) => {
+      if (!userOrg) return null
+      // If it's an object with _id, extract it
+      if (userOrg._id) return userOrg._id
+      // If it's already an ObjectId or string, return it
+      return userOrg
+    }
+    
     // Build base query with organization filter
     let baseQuery = {}
+    const userOrgId = getUserOrganizationId(req.user.organization)
     
     // Filter by organization - admins can filter, others see only their org
     if (req.user.role === 'admin') {
@@ -795,19 +904,28 @@ router.get('/stats/dashboard', protect, async (req, res) => {
         baseQuery.organization = organization
       }
       // If no organization selected, baseQuery remains {} to show all tickets
-    } else if (req.user.organization) {
+    } else if (userOrgId) {
       // Non-admin users only see tickets from their organization
-      baseQuery.organization = req.user.organization
+      baseQuery.organization = userOrgId
     }
     
-    // Department heads see tickets from their department
+    // Department heads see tickets from their department AND organization
     if (req.user.role === 'department-head') {
       const user = await User.findById(req.user._id).populate('department')
+      console.log('GET /api/tickets/stats/dashboard - Department Head - User department:', user.department?._id || user.department || 'None')
+      console.log('GET /api/tickets/stats/dashboard - Department Head - User organization (raw):', req.user.organization)
+      console.log('GET /api/tickets/stats/dashboard - Department Head - User organization ID:', userOrgId || 'None')
       if (user.department) {
         // Ensure tickets have a department and match the department head's department
         baseQuery.department = user.department._id
+        console.log('GET /api/tickets/stats/dashboard - Department Head - Filtering by department:', user.department._id)
+        // Also ensure organization matches (already set above if user has organization)
+        if (userOrgId) {
+          console.log('GET /api/tickets/stats/dashboard - Department Head - Filtering by organization:', userOrgId)
+        }
       } else {
         // No department assigned, return empty stats
+        console.log('GET /api/tickets/stats/dashboard - Department Head - No department assigned to user')
         return res.json({
           totalTickets: 0,
           openTickets: 0,
@@ -947,7 +1065,8 @@ router.get('/stats/dashboard', protect, async (req, res) => {
         { creator: req.user._id }
       ]
       
-      if (req.user.organization) {
+      const techUserOrgId = getUserOrganizationId(req.user.organization)
+      if (techUserOrgId) {
         // If user has organization, tickets must be from that org OR have no org
         myOpenTicketsQuery.$and = [
           {
@@ -955,7 +1074,7 @@ router.get('/stats/dashboard', protect, async (req, res) => {
           },
           {
             $or: [
-              { organization: req.user.organization },
+              { organization: techUserOrgId },
               { organization: null },
               { organization: { $exists: false } }
             ]

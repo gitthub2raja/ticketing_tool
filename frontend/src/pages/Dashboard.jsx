@@ -117,27 +117,32 @@ export const Dashboard = () => {
             departmentName: t.department?.name || 'None'
           })))
           
-          // Ensure we have an array and filter out any tickets without proper department match
+          // Backend already filters by department and organization, so just use the tickets as-is
+          // But verify they have the correct status for safety
           const validPendingTickets = Array.isArray(pendingTickets) 
             ? pendingTickets.filter(ticket => {
-                const ticketStatus = ticket.status === 'approval-pending'
-                const ticketDept = ticket.department?._id || ticket.department
-                const userDept = user?.department?._id || user?.department
-                const deptMatch = !ticketDept || !userDept || ticketDept.toString() === userDept.toString()
+                const isValid = ticket.status === 'approval-pending'
                 
-                console.log('Department Head - Ticket filter check:', {
-                  ticketId: ticket.ticketId,
-                  status: ticket.status,
-                  statusMatch: ticketStatus,
-                  ticketDept: ticketDept?.toString() || 'None',
-                  userDept: userDept?.toString() || 'None',
-                  deptMatch: deptMatch,
-                  include: ticketStatus && deptMatch
-                })
+                // Log for debugging
+                if (!isValid) {
+                  console.log('Department Head - Ticket filtered out (wrong status):', {
+                    ticketId: ticket.ticketId,
+                    status: ticket.status,
+                    expected: 'approval-pending'
+                  })
+                }
                 
-                return ticketStatus && deptMatch
+                return isValid
               })
             : []
+          
+          console.log('Department Head - Final approval pending tickets:', validPendingTickets.length, validPendingTickets.map(t => ({
+            id: t.ticketId,
+            title: t.title,
+            status: t.status,
+            department: t.department?._id?.toString() || t.department?.toString() || 'None',
+            organization: t.organization?._id?.toString() || t.organization?.toString() || 'None'
+          })))
           
           console.log('Department Head - Valid approval pending tickets after filtering:', validPendingTickets.length)
           setApprovalPendingTickets(validPendingTickets)
@@ -156,7 +161,7 @@ export const Dashboard = () => {
           approvalPendingTickets: data.approvalPendingTickets || 0,
           approvedTickets: data.approvedTickets || 0,
           rejectedTickets: data.rejectedTickets || 0,
-          inProgressTickets: data['in-progress'] || 0,
+          inProgressTickets: data.inProgressTickets || 0,
           resolvedTickets: data.resolvedTickets || 0,
           closedTickets: data.closedTickets || 0,
           pendingTickets: data.pendingTickets || 0,
@@ -249,7 +254,7 @@ export const Dashboard = () => {
         approvalPendingTickets: data.approvalPendingTickets || 0,
         approvedTickets: data.approvedTickets || 0,
         rejectedTickets: data.rejectedTickets || 0,
-        inProgressTickets: data['in-progress'] || 0,
+        inProgressTickets: data.inProgressTickets || 0,
         resolvedTickets: data.resolvedTickets || 0,
         closedTickets: data.closedTickets || 0,
         pendingTickets: data.pendingTickets || 0,
