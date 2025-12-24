@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Badge } from '../../components/ui/Badge'
 import { Select } from '../../components/ui/Select'
-import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
+import { Plus, Search, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { ticketsAPI, departmentsAPI } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
@@ -18,6 +18,7 @@ export const TicketList = () => {
   const [tickets, setTickets] = useState([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
   const [priorityFilter, setPriorityFilter] = useState('all')
   const [departmentFilter, setDepartmentFilter] = useState('all')
@@ -40,10 +41,19 @@ export const TicketList = () => {
     }
   }, [isAdmin])
 
-  // Load tickets only on initial mount - no automatic refresh
+  // Debounce search term to avoid too many API calls
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm)
+    }, 500) // Wait 500ms after user stops typing
+
+    return () => clearTimeout(timer)
+  }, [searchTerm])
+
+  // Load tickets on initial mount and when filters change
   useEffect(() => {
     loadTickets()
-  }, []) // Empty dependency array - only run on mount
+  }, [statusFilter, priorityFilter, departmentFilter, debouncedSearchTerm]) // Reload when filters change
 
   const loadDepartments = async () => {
     try {
@@ -67,8 +77,8 @@ export const TicketList = () => {
       if (departmentFilter && departmentFilter !== 'all') {
         filters.department = departmentFilter
       }
-      if (searchTerm && searchTerm.trim()) {
-        filters.search = searchTerm.trim()
+      if (debouncedSearchTerm && debouncedSearchTerm.trim()) {
+        filters.search = debouncedSearchTerm.trim()
       }
       
       console.log('Loading tickets with filters:', filters) // Debug log
@@ -176,7 +186,7 @@ export const TicketList = () => {
 
             {/* Filters */}
             <Card className="animate-slide-down" style={{ animationDelay: '0.1s' }}>
-              <div className={`grid grid-cols-1 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-4 items-end`}>
+              <div className={`grid grid-cols-1 md:grid-cols-2 ${isAdmin ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4 items-end`}>
                 <div className="relative md:col-span-2 lg:col-span-1">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 z-10" size={20} />
                   <Input
@@ -233,12 +243,6 @@ export const TicketList = () => {
                     />
                   </div>
                 )}
-                <div className="w-full">
-                  <Button variant="outline" transparent className="w-full">
-                    <Filter size={20} className="mr-2" />
-                    More Filters
-                  </Button>
-                </div>
               </div>
             </Card>
 
@@ -285,7 +289,8 @@ export const TicketList = () => {
                               if (target.tagName === 'BUTTON' || 
                                   target.closest('button') || 
                                   target.closest('a') ||
-                                  target.closest('.badge')) {
+                                  target.closest('.badge') ||
+                                  target.closest('td:first-child + td button')) {
                                 return
                               }
                               navigate(`/tickets/${ticket.ticketId}`)
@@ -294,10 +299,19 @@ export const TicketList = () => {
                             <td className="px-6 py-4 whitespace-nowrap align-middle">
                               <div className="text-sm font-semibold text-gray-900">#{ticket.ticketId}</div>
                             </td>
-                            <td className="px-6 py-4 align-middle">
-                              <div className="text-sm font-medium text-gray-900 max-w-xs truncate" title={ticket.title}>
+                            <td className="px-6 py-4 align-middle" onClick={(e) => e.stopPropagation()}>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  navigate(`/tickets/${ticket.ticketId}`)
+                                }}
+                                className="text-sm font-medium text-primary-600 hover:text-primary-700 max-w-xs truncate text-left hover:underline transition-colors cursor-pointer relative z-20 block w-full bg-transparent border-0 p-0"
+                                title={ticket.title}
+                              >
                                 {ticket.title}
-                              </div>
+                              </button>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap align-middle">
                               <span className="inline-block text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded-md">

@@ -105,11 +105,45 @@ export const Dashboard = () => {
       // Load approval pending tickets for department heads
       if (isDepartmentHead) {
         try {
+          // Get approval pending tickets - backend will automatically filter by department
           const pendingTickets = await ticketsAPI.getAll({ status: 'approval-pending' })
-          console.log('Department Head - Approval pending tickets loaded:', pendingTickets?.length || 0, pendingTickets)
-          setApprovalPendingTickets(pendingTickets || [])
+          console.log('Department Head - Approval pending tickets loaded:', pendingTickets?.length || 0)
+          console.log('Department Head - User department:', user?.department?._id || user?.department || 'None')
+          console.log('Department Head - Tickets details:', pendingTickets?.map(t => ({
+            id: t.ticketId,
+            title: t.title,
+            status: t.status,
+            department: t.department?._id || t.department || 'None',
+            departmentName: t.department?.name || 'None'
+          })))
+          
+          // Ensure we have an array and filter out any tickets without proper department match
+          const validPendingTickets = Array.isArray(pendingTickets) 
+            ? pendingTickets.filter(ticket => {
+                const ticketStatus = ticket.status === 'approval-pending'
+                const ticketDept = ticket.department?._id || ticket.department
+                const userDept = user?.department?._id || user?.department
+                const deptMatch = !ticketDept || !userDept || ticketDept.toString() === userDept.toString()
+                
+                console.log('Department Head - Ticket filter check:', {
+                  ticketId: ticket.ticketId,
+                  status: ticket.status,
+                  statusMatch: ticketStatus,
+                  ticketDept: ticketDept?.toString() || 'None',
+                  userDept: userDept?.toString() || 'None',
+                  deptMatch: deptMatch,
+                  include: ticketStatus && deptMatch
+                })
+                
+                return ticketStatus && deptMatch
+              })
+            : []
+          
+          console.log('Department Head - Valid approval pending tickets after filtering:', validPendingTickets.length)
+          setApprovalPendingTickets(validPendingTickets)
         } catch (error) {
           console.error('Failed to load approval pending tickets', error)
+          toast.error('Failed to load approval pending tickets: ' + (error.message || 'Unknown error'))
           setApprovalPendingTickets([])
         }
       }
@@ -182,44 +216,31 @@ export const Dashboard = () => {
         }))
         setPriorityData(priorityWithPercentages)
       } else if (!isAdmin && !isAgentOrTechnician) {
-        // For regular users, only show their own tickets
-        // Use data from dashboard stats API which already filters by creator for regular users
-        const myOpenTicketsList = data.myOpenTickets || []
-        
-        // Get all user's tickets for stats calculation
+        // For regular users, only show recently created tickets
+        // Get all user's tickets sorted by creation date (most recent first)
         const allMyTickets = await ticketsAPI.getAll()
         
-        // Calculate stats for user's own tickets
-        const myStats = {
-          totalTickets: data.totalTickets || 0,
-          pendingTickets: data.pendingTickets || 0,
-          closedTickets: data.closedTickets || 0,
-          overdueTickets: data.overdueTickets || 0,
-        }
+        // Sort by creation date descending (most recent first) and limit to recent tickets
+        const recentTicketsList = allMyTickets
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+          .slice(0, 20) // Show last 20 tickets
         
-        setStats(myStats)
-        setMyOpenTickets(myOpenTicketsList)
-        setRecentTickets([]) // Don't show recent tickets for regular users
-        
-        // Status distribution for user's tickets
-        const statusCounts = {}
-        allMyTickets.forEach(ticket => {
-          statusCounts[ticket.status] = (statusCounts[ticket.status] || 0) + 1
-        })
-        setStatusData(Object.entries(statusCounts).map(([name, value]) => ({ name, value })))
-        
-        // Priority distribution for user's tickets
-        const priorityCounts = {}
-        allMyTickets.forEach(ticket => {
-          priorityCounts[ticket.priority] = (priorityCounts[ticket.priority] || 0) + 1
-        })
-        const totalPriorityTickets = Object.values(priorityCounts).reduce((sum, val) => sum + val, 0)
-        const priorityWithPercentages = Object.entries(priorityCounts).map(([name, value]) => ({
-          name,
-          value,
-          percentage: totalPriorityTickets > 0 ? Math.round((value / totalPriorityTickets) * 100) : 0
-        }))
-        setPriorityData(priorityWithPercentages)
+        setStats({
+          totalTickets: 0,
+          openTickets: 0,
+          approvalPendingTickets: 0,
+          approvedTickets: 0,
+          rejectedTickets: 0,
+          inProgressTickets: 0,
+          resolvedTickets: 0,
+          closedTickets: 0,
+          pendingTickets: 0,
+          overdueTickets: 0,
+        }) // Set default stats for regular users (not used but prevents errors)
+        setMyOpenTickets([]) // Don't show my open tickets section
+        setRecentTickets(recentTicketsList) // Show recent tickets
+        setStatusData([]) // No charts for regular users
+        setPriorityData([]) // No charts for regular users
       } else {
         // Admin/Technician view - show all data
       setStats({
@@ -274,7 +295,8 @@ export const Dashboard = () => {
     }
   }
 
-  const statsData = (isAdmin || isDepartmentHead || isAgentOrTechnician) ? [
+  // Only compute statsData for admin/technician/department head
+  const statsData = (isAdmin || isDepartmentHead || isAgentOrTechnician) && stats.totalTickets !== undefined ? [
     { 
       label: 'Total Tickets', 
       value: stats.totalTickets.toLocaleString(), 
@@ -377,8 +399,18 @@ export const Dashboard = () => {
       shadow: 'shadow-primary-200/50'
     },
     { 
-      label: 'Pending Tickets', 
-      value: stats.pendingTickets.toLocaleString(), 
+      label: 'Open', 
+      value: (stats.openTickets || 0).toLocaleString(), 
+      icon: Ticket, 
+      color: 'text-blue-600', 
+      bgGradient: 'from-blue-50 to-blue-100/50',
+      iconBg: 'bg-gradient-to-br from-blue-500 to-blue-600',
+      borderColor: 'border-blue-200',
+      shadow: 'shadow-blue-200/50'
+    },
+    { 
+      label: 'Approval Pending', 
+      value: (stats.approvalPendingTickets || 0).toLocaleString(), 
       icon: Clock, 
       color: 'text-orange-600', 
       bgGradient: 'from-orange-50 to-orange-100/50',
@@ -387,8 +419,8 @@ export const Dashboard = () => {
       shadow: 'shadow-orange-200/50'
     },
     { 
-      label: 'Closed Tickets', 
-      value: stats.closedTickets.toLocaleString(), 
+      label: 'Approved', 
+      value: (stats.approvedTickets || 0).toLocaleString(), 
       icon: CheckCircle, 
       color: 'text-green-600', 
       bgGradient: 'from-green-50 to-green-100/50',
@@ -397,8 +429,48 @@ export const Dashboard = () => {
       shadow: 'shadow-green-200/50'
     },
     { 
-      label: 'Overdue Tickets', 
-      value: stats.overdueTickets.toLocaleString(), 
+      label: 'Rejected', 
+      value: (stats.rejectedTickets || 0).toLocaleString(), 
+      icon: AlertCircle, 
+      color: 'text-red-600', 
+      bgGradient: 'from-red-50 to-red-100/50',
+      iconBg: 'bg-gradient-to-br from-red-500 to-red-600',
+      borderColor: 'border-red-200',
+      shadow: 'shadow-red-200/50'
+    },
+    { 
+      label: 'In Progress', 
+      value: (stats.inProgressTickets || 0).toLocaleString(), 
+      icon: Clock, 
+      color: 'text-yellow-600', 
+      bgGradient: 'from-yellow-50 to-yellow-100/50',
+      iconBg: 'bg-gradient-to-br from-yellow-500 to-yellow-600',
+      borderColor: 'border-yellow-200',
+      shadow: 'shadow-yellow-200/50'
+    },
+    { 
+      label: 'Resolved', 
+      value: (stats.resolvedTickets || 0).toLocaleString(), 
+      icon: CheckCircle, 
+      color: 'text-emerald-600', 
+      bgGradient: 'from-emerald-50 to-emerald-100/50',
+      iconBg: 'bg-gradient-to-br from-emerald-500 to-emerald-600',
+      borderColor: 'border-emerald-200',
+      shadow: 'shadow-emerald-200/50'
+    },
+    { 
+      label: 'Closed', 
+      value: (stats.closedTickets || 0).toLocaleString(), 
+      icon: CheckCircle, 
+      color: 'text-gray-600', 
+      bgGradient: 'from-gray-50 to-gray-100/50',
+      iconBg: 'bg-gradient-to-br from-gray-500 to-gray-600',
+      borderColor: 'border-gray-200',
+      shadow: 'shadow-gray-200/50'
+    },
+    { 
+      label: 'Overdue', 
+      value: (stats.overdueTickets || 0).toLocaleString(), 
       icon: AlertTriangle, 
       color: 'text-red-600', 
       bgGradient: 'from-red-50 to-red-100/50',
@@ -490,99 +562,103 @@ export const Dashboard = () => {
               </div>
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {statsData.map((stat, index) => {
-                const Icon = stat.icon
-                const statusValue = getStatusFromLabel(stat.label)
-                const isClickable = statusValue !== null || stat.label === 'Total Tickets'
-                return (
-                  <Card 
-                    key={stat.label} 
-                    className={`p-6 border-l-4 ${stat.borderColor} bg-gradient-to-br ${stat.bgGradient} animate-scale-in transition-all duration-300 ${
-                      isClickable ? 'cursor-pointer hover:shadow-xl hover:scale-105 hover:-translate-y-1' : ''
-                    }`}
-                    style={{ animationDelay: `${index * 0.1}s` }}
-                    onClick={() => isClickable && handleStatusCardClick(stat.label)}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">{stat.label}</p>
-                        <p className={`text-3xl font-bold ${stat.color} drop-shadow-sm`}>{stat.value}</p>
-                        {isClickable && (
-                          <p className="text-xs text-gray-500 mt-2 opacity-70">Click to view</p>
-                        )}
-                      </div>
-                      <div className={`${stat.iconBg} p-4 rounded-xl shadow-lg ${stat.shadow}`}>
-                        <Icon className="text-white" size={28} />
-                      </div>
-                    </div>
-                  </Card>
-                )
-              })}
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card title="Tickets by Status">
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={statusData.length > 0 ? statusData : [{ name: 'No Data', value: 0 }]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="name" stroke="#6b7280" tick={{ fill: '#6b7280' }} />
-                    <YAxis stroke="#6b7280" tick={{ fill: '#6b7280' }} />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#ffffff', 
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '0.5rem',
-                        color: '#111827'
-                      }}
-                    />
-                    <Bar dataKey="value" name="Tickets" radius={[8, 8, 0, 0]}>
-                      {statusData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={chartColors[entry.name] || '#3b82f6'} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </Card>
-
-              <Card title="Tickets by Priority">
-                <ResponsiveContainer width="100%" height={300}>
-                  {priorityData.length > 0 ? (
-                    <PieChart>
-                      <Pie
-                        data={priorityData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, percentage }) => `${name} ${percentage}%`}
-                        outerRadius={80}
-                        fill="#8884d8"
-                        dataKey="value"
+            {/* Stats Grid - Only for Admin/Technician/Department Head */}
+            {(isAdmin || isDepartmentHead || isAgentOrTechnician) && statsData && statsData.length > 0 && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {statsData.map((stat, index) => {
+                    const Icon = stat.icon
+                    const statusValue = getStatusFromLabel(stat.label)
+                    const isClickable = statusValue !== null || stat.label === 'Total Tickets'
+                    return (
+                      <Card 
+                        key={stat.label} 
+                        className={`p-6 border-l-4 ${stat.borderColor} bg-gradient-to-br ${stat.bgGradient} animate-scale-in transition-all duration-300 ${
+                          isClickable ? 'cursor-pointer hover:shadow-xl hover:scale-105 hover:-translate-y-1' : ''
+                        }`}
+                        style={{ animationDelay: `${index * 0.1}s` }}
+                        onClick={() => isClickable && handleStatusCardClick(stat.label)}
                       >
-                        {priorityData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={chartColors[entry.name] || '#3b82f6'} />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ 
-                          backgroundColor: '#ffffff', 
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '0.5rem',
-                          color: '#111827'
-                        }}
-                        formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, name]}
-                      />
-                    </PieChart>
-                  ) : (
-                    <div className="flex items-center justify-center h-full">
-                      <p className="text-gray-500">No priority data available</p>
-                    </div>
-                  )}
-                </ResponsiveContainer>
-              </Card>
-            </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <p className="text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">{stat.label}</p>
+                            <p className={`text-3xl font-bold ${stat.color} drop-shadow-sm`}>{stat.value}</p>
+                            {isClickable && (
+                              <p className="text-xs text-gray-500 mt-2 opacity-70">Click to view</p>
+                            )}
+                          </div>
+                          <div className={`${stat.iconBg} p-4 rounded-xl shadow-lg ${stat.shadow}`}>
+                            <Icon className="text-white" size={28} />
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })}
+                </div>
+
+                {/* Charts Row - Only for Admin/Technician/Department Head */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <Card title="Tickets by Status">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={statusData.length > 0 ? statusData : [{ name: 'No Data', value: 0 }]}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                        <XAxis dataKey="name" stroke="#6b7280" tick={{ fill: '#6b7280' }} />
+                        <YAxis stroke="#6b7280" tick={{ fill: '#6b7280' }} />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#ffffff', 
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '0.5rem',
+                            color: '#111827'
+                          }}
+                        />
+                        <Bar dataKey="value" name="Tickets" radius={[8, 8, 0, 0]}>
+                          {statusData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={chartColors[entry.name] || '#3b82f6'} />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </Card>
+
+                  <Card title="Tickets by Priority">
+                    <ResponsiveContainer width="100%" height={300}>
+                      {priorityData.length > 0 ? (
+                        <PieChart>
+                          <Pie
+                            data={priorityData}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={({ name, percentage }) => `${name} ${percentage}%`}
+                            outerRadius={80}
+                            fill="#8884d8"
+                            dataKey="value"
+                          >
+                            {priorityData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={chartColors[entry.name] || '#3b82f6'} />
+                            ))}
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#ffffff', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '0.5rem',
+                              color: '#111827'
+                            }}
+                            formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, name]}
+                          />
+                        </PieChart>
+                      ) : (
+                        <div className="flex items-center justify-center h-full">
+                          <p className="text-gray-500">No priority data available</p>
+                        </div>
+                      )}
+                    </ResponsiveContainer>
+                  </Card>
+                </div>
+              </>
+            )}
 
             {/* Approval Pending Tickets - Only for Department Heads */}
             {isDepartmentHead && (
@@ -593,12 +669,20 @@ export const Dashboard = () => {
                       <div className="inline-block animate-spin text-primary-600 text-4xl mb-4">⟳</div>
                       <p className="text-gray-600">Loading pending tickets...</p>
                     </div>
+                  ) : !user?.department ? (
+                    <div className="text-center py-12">
+                      <AlertCircle className="mx-auto h-12 w-12 text-orange-400 mb-4" />
+                      <p className="text-gray-600">No department assigned</p>
+                      <p className="text-sm text-gray-500 mt-2">
+                        Please contact an administrator to assign a department to your account.
+                      </p>
+                    </div>
                   ) : approvalPendingTickets.length === 0 ? (
                     <div className="text-center py-12">
                       <CheckCircle className="mx-auto h-12 w-12 text-gray-400 mb-4" />
                       <p className="text-gray-600">No tickets pending approval</p>
                       <p className="text-sm text-gray-500 mt-2">
-                        Tickets will appear here when they are moved to "Approval Pending" status and match your department.
+                        Tickets will appear here when they are moved to "Approval Pending" status and match your department ({user.department?.name || 'your department'}).
                       </p>
                     </div>
                   ) : (
@@ -711,16 +795,19 @@ export const Dashboard = () => {
               </Card>
             )}
 
-            {/* My Open Tickets - Only for regular users */}
-            {!isAdmin && !isDepartmentHead && (
-              <Card title="My Tickets">
+            {/* Recent Tickets - Only for regular users */}
+            {!isAdmin && !isDepartmentHead && !isAgentOrTechnician && (
+              <Card title="My Recent Tickets">
                 <div className="space-y-3">
                   {loading ? (
                     <div className="text-center text-gray-500 py-8">Loading...</div>
-                  ) : myOpenTickets.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">No tickets found</div>
+                  ) : recentTickets.length === 0 ? (
+                    <div className="text-center text-gray-500 py-8">
+                      <p className="text-sm font-medium mb-2">No tickets found</p>
+                      <p className="text-xs text-gray-400">Create your first ticket to get started!</p>
+                    </div>
                   ) : (
-                    myOpenTickets.map((ticket) => (
+                    recentTickets.map((ticket) => (
                       <div
                         key={ticket._id}
                         className="p-4 border border-gray-200 rounded-xl hover:border-primary-300 hover:shadow-lg cursor-pointer transition-all duration-300 bg-white/80 backdrop-blur-sm hover:-translate-y-0.5"
@@ -742,10 +829,20 @@ export const Dashboard = () => {
                               <Badge
                                 variant={
                                   ticket.status === 'resolved' ? 'success' :
-                                  ticket.status === 'in-progress' ? 'info' : 'warning'
+                                  ticket.status === 'closed' ? 'secondary' :
+                                  ticket.status === 'approved' ? 'success' :
+                                  ticket.status === 'rejected' ? 'danger' :
+                                  ticket.status === 'approval-pending' ? 'warning' :
+                                  ticket.status === 'in-progress' ? 'info' : 'info'
                                 }
                               >
-                                {ticket.status}
+                                {ticket.status === 'approval-pending' ? 'Approval Pending' :
+                                 ticket.status === 'in-progress' ? 'In Progress' :
+                                 ticket.status === 'open' ? 'Open' :
+                                 ticket.status === 'closed' ? 'Closed' :
+                                 ticket.status === 'resolved' ? 'Resolved' :
+                                 ticket.status === 'approved' ? 'Approved' :
+                                 ticket.status === 'rejected' ? 'Rejected' : ticket.status}
                               </Badge>
                             </div>
                             <p className="text-sm text-gray-900 font-medium mb-1">{ticket.title}</p>
