@@ -8,7 +8,7 @@ import { useSound } from '../utils/soundEffects'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Mail, Lock, Shield, Eye, EyeOff, Moon, Sun } from 'lucide-react'
-import { checkRateLimit, generateCSRFToken, setCSRFToken, validateEmail } from '../services/securityService'
+import { generateCSRFToken, setCSRFToken, validateEmail } from '../services/securityService'
 import toast from 'react-hot-toast'
 
 export const Login = () => {
@@ -27,6 +27,13 @@ export const Login = () => {
   useEffect(() => {
     const csrfToken = generateCSRFToken()
     setCSRFToken(csrfToken)
+    
+    // Clear any existing rate limit data (rate limiting is disabled)
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith('rate_limit_')) {
+        localStorage.removeItem(key)
+      }
+    })
   }, [])
 
   const handleSubmit = async (e) => {
@@ -41,12 +48,13 @@ export const Login = () => {
       return
     }
 
-    const rateLimit = checkRateLimit(`login_${email}`, 5, 15 * 60 * 1000)
-    if (!rateLimit.allowed) {
-      toast.error('Too many login attempts. Please try again in 15 minutes.')
-      setLoading(false)
-      return
-    }
+    // Rate limiting disabled
+    // const rateLimit = checkRateLimit(`login_${email}`, 5, 15 * 60 * 1000)
+    // if (!rateLimit.allowed) {
+    //   toast.error('Too many login attempts. Please try again in 15 minutes.')
+    //   setLoading(false)
+    //   return
+    // }
 
     try {
       const response = await login(email, password)
